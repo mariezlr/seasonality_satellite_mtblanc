@@ -1,0 +1,13 @@
+# Ignore tous les fichiers et dossiers à la racine.
+/* 
+
+# Annule l'ignorance pour tous les dossiers (et leur contenu)
+!/**/ 
+
+# Ignore les dossiers d'archivage
+**/archive/
+**/data/ds_merged.nc
+**/data/
+
+# Ignore les fichiers temporaires Jupyter
+.ipynb_checkpoints/
