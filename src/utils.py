@@ -1,32 +1,74 @@
+import numpy as np
+import pandas as pd
+from scipy.ndimage import convolve
+from scipy.signal import find_peaks, detrend
+from scipy.interpolate import interp1d
 from pathlib import Path
 
 script_dir = Path(__file__).resolve().parent
 data_dir = script_dir / ".." / "data" 
-geom_data_dir = script_dir / ".." / "data" / "structural"
-proc_data_dir = script_dir / ".." / "data" / "processed_timeseries"
+data_topo = script_dir / ".." / "data" / "topography"
+data_validation = script_dir / ".." / "data" / "validation_points"
 fig_dir = script_dir / ".." / "figures" 
 
+### ----- Velocity timeseries analysis -----
+
+# Fusionner les datasets en s'assurant que le dernier fichier écrase les anciens en cas de doublons
+def merge_datasets(ds_list):
+    ds_merged = ds_list[0]
+    for ds in ds_list[1:]:
+        ds_merged = ds.combine_first(ds_merged)  # Priorité au dernier dataset
+    return ds_merged
+
+# Fonction de convolution à appliquer sur chaque tranche (y, x)
+def convolve_2d(arr2d, kernel):
+    return convolve(arr2d, kernel, mode='nearest')
 
 
-file_list = ["../archive/data/Cubes_TICOI/c_x00980_y03920_interp.nc", "../archive/data/Cubes_TICOI/c_x01225_y03675_interp.nc", 
-             "../archive/data/Cubes_TICOI/c_x01225_y03920_interp.nc", "../archive/data/Cubes_TICOI/c_x01470_y03430_1_interp.nc", 
-             "../archive/data/Cubes_TICOI/c_x01470_y03430_2_interp.nc", "../archive/data/Cubes_TICOI/c_x01470_y03675_1_interp.nc", 
-             "../archive/data/Cubes_TICOI/c_x01470_y03675_2_interp.nc", "../archive/data/Cubes_TICOI/c_x01715_y03430_interp.nc"] 
+# Fonction pour détrender une série 1D
+def detrend_1d(arr1d):
+    # Si tout est NaN, retourne la série telle quelle
+    if np.all(np.isnan(arr1d)):
+        return arr1d
+    
+    # Interpoler les NaN pour pouvoir appliquer detrend
+    arr = arr1d.copy()
+    nans = np.isnan(arr)
+    if np.any(nans):
+        x = np.arange(len(arr))
+        arr[nans] = np.interp(x[nans], x[~nans], arr[~nans])
+    
+    vel_detrended = detrend(arr, type="linear")
+    vel_mean = np.nanmean(arr)
+    
+    # Appliquer detrend
+    return vel_detrended + vel_mean
+
+## Interpoler les Nan pour que le filtrage fonctionne
+def interp_1d_fill(values, times):
+    if np.all(np.isnan(values)):
+        return values
+
+    # Convertir les dates en float (ex: jours depuis origine)
+    origin = np.datetime64("1970-01-01")
+    times_float = (times - origin) / np.timedelta64(1, "D")
+
+    valid = ~np.isnan(values)
+    interp = interp1d(
+        times_float[valid], values[valid],
+        bounds_error=False,
+        fill_value="extrapolate"
+    )
+    return interp(times_float)
 
 
-tif_map = data_dir / "Sentinel2/T32TLR_20250808T102701_TCI_60m.tif"
-with rasterio.open(tif_map) as src:
-    img_map = src.read([1,2,3])     # R,G,B
-    bounds = src.bounds
-    extent_map = [bounds.left, bounds.right, bounds.bottom, bounds.top]
+def fft_filter(x, sample_step_days=210, cutoff_days=5):
+    n = x.shape[0]
+    freqs = np.fft.fftfreq(n, d=sample_step_days)
+    x_fft = np.fft.fft(x, axis=0)
+    x_fft[np.abs(freqs) > 1 / cutoff_days] = 0
+    return np.real(np.fft.ifft(x_fft, axis=0))
 
 
-ds_list = [xr.open_dataset(f) for f in file_list]
 
-# Fusionner en s'assurant que le dernier fichier écrase les anciens en cas de doublons
-#ds_merged = ds_list[0]
-#for ds in ds_list[1:]:
-#    ds_merged = ds.combine_first(ds_merged)  # Priorité au dernier dataset
 
-#ds_merged.to_netcdf("../data/Cubes_TICOI/ds_merged.nc")
-ds_merged = xr.open_dataset("../data/Cubes_TICOI/ds_merged.nc")
