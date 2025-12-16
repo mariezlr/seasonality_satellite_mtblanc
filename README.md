@@ -30,9 +30,9 @@ Raw and processed data are stored in the data/ directory.
 
 Analysis code is located in src/, structured as follows:
 
-data_exploration.py -->   
-
 utils.py --> 
+
+data_exploration.py -->   
 
 masks.py -->
 

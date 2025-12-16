@@ -5,6 +5,57 @@ import rasterio
 from pyproj import Transformer
 from pathlib import Path
 
+kernel = np.ones((3, 3), dtype=float) / 9.0 # uniform 3x3 kernel normalized to get the avergae
+
+
+# Variables
+result_lowpass = False # False if we want to process the averaged detrended data rather than lowpass filtered data
+
+slope_bins = np.arange(0, 45, 5)
+n_bins = len(slope_bins) - 1
+month_bins = np.linspace(1, 366, 13)
+month_starts = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335]
+mid_month_days = [15 + i*30 for i in month_starts]
+month_labels_short = ['J','F','M','A','M','J','J','A','S','O','N','D']
+month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+years = np.arange(2016, 2023)
+
+### ----- Main dataset -----
+
+# file_list = ["../archive/data/Cubes_TICOI/c_x00980_y03920_interp.nc", "../archive/data/Cubes_TICOI/c_x01225_y03675_interp.nc", 
+#              "../archive/data/Cubes_TICOI/c_x01225_y03920_interp.nc", "../archive/data/Cubes_TICOI/c_x01470_y03430_1_interp.nc", 
+#              "../archive/data/Cubes_TICOI/c_x01470_y03430_2_interp.nc", "../archive/data/Cubes_TICOI/c_x01470_y03675_1_interp.nc", 
+#              "../archive/data/Cubes_TICOI/c_x01470_y03675_2_interp.nc", "../archive/data/Cubes_TICOI/c_x01715_y03430_interp.nc"] 
+
+# ds_list = [xr.open_dataset(f) for f in file_list]
+
+# merge_datasets(ds_list).to_netcdf(data_dir / "ds_merged.nc")
+
+ds_merged = xr.open_dataset(data_dir / "ds_merged.nc")
+
+dx = float(ds_merged['x'][1] - ds_merged['x'][0])
+dy = float(ds_merged['y'][1] - ds_merged['y'][0])
+pixel_size = (dx + dy) / 2
+
+# Target grid
+x = ds_merged.x.values
+y = ds_merged.y.values
+X, Y = np.meshgrid(x, y)
+
+# Flatten (for scatter)
+x_1d = np.repeat(x[np.newaxis, :], y.size, axis=0).flatten()
+y_1d = np.repeat(y[:, np.newaxis], x.size, axis=1).flatten()
+
+
+ds_merged = ds_merged.assign_coords(dayofyear=ds_merged['mid_date'].dt.dayofyear.data, year=ds_merged['mid_date'].dt.year.data)
+
+# Skip incomplete years
+ds_merged = ds_merged.where((ds_merged['mid_date'].dt.year >= 2016) & (ds_merged['mid_date'].dt.year <= 2022), drop=True)
+
+
+
+
 ### ----- Background satellite image -----
 
 tif_map = data_topo / "T32TLR_20250808T102701_TCI_60m.tif"
@@ -14,9 +65,34 @@ with rasterio.open(tif_map) as src:
     extent_map = [bounds.left, bounds.right, bounds.bottom, bounds.top]
 
 
+
+
+
 ### ----- DEM file -----
 
 dem_file = data_topo / "Mt_Blanc_small_UTM32N.tif"
+
+
+## Outlines glaciers
+outlines_csv_path = data_topo / "mtblanc_glaciers_outlines.csv"
+mtblanc_outlines = pd.read_csv(outlines_csv_path, header = 0, names = ['geometry_id', 'lon', 'lat'])
+
+transformer = Transformer.from_crs("EPSG:4326", "EPSG:32632", always_xy=True)
+mtblanc_outlines['x'], mtblanc_outlines['y'] = transformer.transform(mtblanc_outlines['lon'].values, mtblanc_outlines['lat'].values)
+
+
+
+### ----- Melt rate -----
+
+melt_file = pd.read_csv(data_dir / "meteo" / "SafranDailyTemp_1959_2023_MtBlanc.dat", header=None, names=["temp"])
+start_date = "1959-01-01"
+
+dates = pd.date_range(start=start_date, periods=len(melt_file), freq="D")
+melt_file["date"] = dates
+
+# conversion in dataarray indexed by days:
+melt_file["date"] = pd.to_datetime(melt_file["date"])
+melt_da = melt_file.set_index("date")["temp"].to_xarray()
 
 
 ### ----- GPS data for validation -----
@@ -65,31 +141,74 @@ x_utm_ArgG_GPS, y_utm_ArgG_GPS = transformer.transform(x_l2_ArgG_GPS, y_l2_ArgG_
 
 
 
+## ----- Discharge on Argentière -----
+
+## Daily data (1985 - 2018)
+Q_daily_Arg_bef_2018 = pd.read_excel(data_dir / "meteo" / "Q_moyen_Argentiere_1985_2018_Data_Emosson_Argentiere_Le_Tour_Gimbert.xlsx", header = None)
+Q_daily_Arg_bef_2018.columns = ["date", "Q"]
+Q_daily_Arg_bef_2018['date'] = pd.to_datetime(Q_daily_Arg_bef_2018['date'])
+
+## 15-min data (2018 - 2025)
+Q_15min_Arg_aft_2018 = pd.read_csv(data_dir / "meteo" / "water_discharge_2019-2021.dat", delimiter = "\s+", header = None, comment="#")
+Q_15min_Arg_aft_2018.columns = ["date", "Q"]
+Q_15min_Arg_aft_2018 = Q_15min_Arg_aft_2018[~Q_15min_Arg_aft_2018['date'].astype(str).str.startswith('>')]
+Q_15min_Arg_aft_2018['date'] = pd.to_datetime(Q_15min_Arg_aft_2018['date'])
+
+## Group by day
+Q_15min_Arg_aft_2018['days'] = Q_15min_Arg_aft_2018['date'].dt.date
+Q_daily_Arg_aft_2018 = Q_15min_Arg_aft_2018.groupby('days').mean(numeric_only=True).reset_index()
+Q_daily_Arg_aft_2018.columns = ["date", "Q"]
+
+## Filter negative data & Group the 2 timeseries
+Q_daily_Arg_aft_2018 = Q_daily_Arg_aft_2018[Q_daily_Arg_aft_2018['Q']>=0]
+Q_daily_mean = pd.concat([Q_daily_Arg_bef_2018, Q_daily_Arg_aft_2018])
+Q_daily_mean['date'] = pd.to_datetime(Q_daily_mean['date'], errors='coerce')
+
+# Filter between 01/2016 and 12/2022
+mask = (Q_daily_mean['date'] >= '2016-01-01') & (Q_daily_mean['date'] <= '2022-12-31')
+Q_filtered = Q_daily_mean[mask].copy()
+
+# Calculates mean annual cycle (daily avg on the 7 years)
+Q_filtered['doy'] = Q_filtered['date'].dt.dayofyear # Extrac doy (1 to 366)
+Q_annual_cycle = Q_filtered.groupby('doy')['Q'].mean().reset_index()
 
 
 
-### ----- Main dataset -----
 
-# file_list = ["../archive/data/Cubes_TICOI/c_x00980_y03920_interp.nc", "../archive/data/Cubes_TICOI/c_x01225_y03675_interp.nc", 
-#              "../archive/data/Cubes_TICOI/c_x01225_y03920_interp.nc", "../archive/data/Cubes_TICOI/c_x01470_y03430_1_interp.nc", 
-#              "../archive/data/Cubes_TICOI/c_x01470_y03430_2_interp.nc", "../archive/data/Cubes_TICOI/c_x01470_y03675_1_interp.nc", 
-#              "../archive/data/Cubes_TICOI/c_x01470_y03675_2_interp.nc", "../archive/data/Cubes_TICOI/c_x01715_y03430_interp.nc"] 
+## ----- Precipitation files -----
 
-# ds_list = [xr.open_dataset(f) for f in file_list]
+## Safran data (30 min res)
+precip_safran_file = data_dir / "meteo" / "rainfall_2019-2021.dat"
+df_safran_precip = pd.read_csv(precip_safran_file, sep="\s+", parse_dates=["date"], names = ["date", "precip"], header=None)
 
-# merge_datasets(ds_list).to_netcdf("../data/ds_merged.nc")
+## MeteoFrance MtBlanc
+precip_file = data_dir / "meteo" / "23a368d7-59e3-488d-afb7-3890f972dcd7.parquet"
+df = pd.read_parquet(precip_file, columns=["NUM_POSTE", "LAT", "LON", "AAAAMMJJ", "RR"])
+transformer = Transformer.from_crs("EPSG:4326", "EPSG:32632", always_xy=True)
+df["x_utm"], df["y_utm"] = transformer.transform(df["LON"].values, df["LAT"].values)
 
-ds_merged = xr.open_dataset(data_dir / "ds_merged.nc")
 
-dx = float(ds_merged['x'][1] - ds_merged['x'][0])
-dy = float(ds_merged['y'][1] - ds_merged['y'][0])
-pixel_size = (dx + dy) / 2
+x_min_mf, x_max_mf = np.nanmin(x_1d), np.nanmax(x_1d)
+y_min_mf, y_max_mf = np.nanmin(y_1d), np.nanmax(y_1d)
 
-ds_merged = ds_merged.assign_coords(dayofyear=ds_merged['mid_date'].dt.dayofyear.data, year=ds_merged['mid_date'].dt.year.data)
+m = 1.12  # pente
+b = 4715000  # intercept en mètres
 
-velocity = np.sqrt(ds_merged['vx']**2 + ds_merged['vy']**2)
-xcount = np.sqrt(ds_merged['xcount_x']**2 + ds_merged['xcount_y']**2)
+# Masque des points au sud de la droite
+mask_south = df["y_utm"] < (m * df["x_utm"] + b)
 
-# Skip incomplete years
-ds_merged = ds_merged.where((ds_merged['mid_date'].dt.year >= 2016) & (ds_merged['mid_date'].dt.year <= 2022), drop=True)
+# Filtrer dans la zone approximative + sud de la droite
+stations_mtblanc = df[
+    mask_south &
+    (df["y_utm"] >= y_min_mf) & (df["y_utm"] <= y_max_mf) &
+    (df["x_utm"] >= x_min_mf) & (df["x_utm"] <= x_max_mf)
+]["NUM_POSTE"].unique()
 
+df_mtblanc = df[df["NUM_POSTE"].isin(stations_mtblanc)]
+
+df_mtblanc['date'] = pd.to_datetime(df_mtblanc['AAAAMMJJ'], format='%Y%m%d')
+df_20162022 = df_mtblanc[(df_mtblanc['date'].dt.year >= 2016) & (df_mtblanc['date'].dt.year <= 2022)]
+
+# Grouper par date et calculer la moyenne des RR
+df_20162022['RR'] = pd.to_numeric(df_20162022['RR'], errors='coerce')
+ts_daily = df_20162022.groupby('date')['RR'].mean() 
