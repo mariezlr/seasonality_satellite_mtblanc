@@ -1,22 +1,17 @@
 from utils import *
 import numpy as np
 import xarray as xr
+import pandas as pd
 import rasterio
 from pyproj import Transformer
 from pathlib import Path
 
 
-# Définir les métadonnées globales communes
-global_attrs = {
-    "project": "Seasonality Analysis - Mont Blanc",
-    "contact": "marie.zeller@univ-grenoble-alpes.fr",
-}
-
-
 kernel = np.ones((3, 3), dtype=float) / 9.0 # uniform 3x3 kernel normalized to get the avergae
 
 
-# Variables
+### ----- Variables -----
+
 result_lowpass = False # False if we want to process the averaged detrended data rather than lowpass filtered data
 
 slope_bins = np.arange(0, 45, 5)
@@ -29,18 +24,25 @@ month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 years = np.arange(2016, 2023)
 
+
 ### ----- Main dataset -----
 
-# file_list = ["../archive/data/Cubes_TICOI/c_x00980_y03920_interp.nc", "../archive/data/Cubes_TICOI/c_x01225_y03675_interp.nc", 
-#              "../archive/data/Cubes_TICOI/c_x01225_y03920_interp.nc", "../archive/data/Cubes_TICOI/c_x01470_y03430_1_interp.nc", 
-#              "../archive/data/Cubes_TICOI/c_x01470_y03430_2_interp.nc", "../archive/data/Cubes_TICOI/c_x01470_y03675_1_interp.nc", 
-#              "../archive/data/Cubes_TICOI/c_x01470_y03675_2_interp.nc", "../archive/data/Cubes_TICOI/c_x01715_y03430_interp.nc"] 
+ds_path = Path(data_dir / "ds_merged.nc")
 
-# ds_list = [xr.open_dataset(f) for f in file_list]
+if not ds_path.exists():
+    print(f"File {ds_path} doesn't exist. Creation of the file...")
 
-# merge_datasets(ds_list).to_netcdf(data_dir / "ds_merged.nc")
+    file_list = ["../archive/data/Cubes_TICOI/c_x00980_y03920_interp.nc", "../archive/data/Cubes_TICOI/c_x01225_y03675_interp.nc", 
+                "../archive/data/Cubes_TICOI/c_x01225_y03920_interp.nc", "../archive/data/Cubes_TICOI/c_x01470_y03430_1_interp.nc", 
+                "../archive/data/Cubes_TICOI/c_x01470_y03430_2_interp.nc", "../archive/data/Cubes_TICOI/c_x01470_y03675_1_interp.nc", 
+                "../archive/data/Cubes_TICOI/c_x01470_y03675_2_interp.nc", "../archive/data/Cubes_TICOI/c_x01715_y03430_interp.nc"] 
 
-ds_merged = xr.open_dataset(data_dir / "ds_merged.nc")
+    ds_list = [xr.open_dataset(f) for f in file_list]
+    merge_datasets(ds_list).to_netcdf(ds_path)
+
+    print(f"File {ds_path} was created.")
+
+ds_merged = xr.open_dataset(ds_path)
 
 dx = float(ds_merged['x'][1] - ds_merged['x'][0])
 dy = float(ds_merged['y'][1] - ds_merged['y'][0])
@@ -63,7 +65,6 @@ ds_merged = ds_merged.where((ds_merged['mid_date'].dt.year >= 2016) & (ds_merged
 
 
 
-
 ### ----- Background satellite image -----
 
 tif_map = data_topo / "T32TLR_20250808T102701_TCI_60m.tif"
@@ -71,7 +72,6 @@ with rasterio.open(tif_map) as src:
     img_map = src.read([1,2,3])     # R,G,B
     bounds = src.bounds
     extent_map = [bounds.left, bounds.right, bounds.bottom, bounds.top]
-
 
 
 
@@ -87,7 +87,6 @@ mtblanc_outlines = pd.read_csv(outlines_csv_path, header = 0, names = ['geometry
 
 transformer = Transformer.from_crs("EPSG:4326", "EPSG:32632", always_xy=True)
 mtblanc_outlines['x'], mtblanc_outlines['y'] = transformer.transform(mtblanc_outlines['lon'].values, mtblanc_outlines['lat'].values)
-
 
 
 ### ----- Melt rate -----
@@ -220,3 +219,76 @@ df_20162022 = df_mtblanc[(df_mtblanc['date'].dt.year >= 2016) & (df_mtblanc['dat
 # Grouper par date et calculer la moyenne des RR
 df_20162022.loc[:, 'RR'] = pd.to_numeric(df_20162022['RR'], errors='coerce')
 ts_daily = df_20162022.groupby('date')['RR'].mean() 
+
+
+
+### ----- Friction law Elmer -----
+
+elmer_base_dir = Path("C:/Users/zellerma/Documents/PhD/Recherche/friction_long_term_alps/archive/data")
+
+glaciers = {
+    "All":  {"years": [1932,1956,1967,1982,1991,2004,2008,2012,2017,2020], "C": 0.034},
+    "Arg":  {"years": [1904,1949,1952,1979,1998,2003,2008,2011,2015,2019], "C": 0.038},
+    "Cor":  {"years": [1934,1983,1998,2003,2008,2017],                     "C": 0.040},
+    "Gie":  {"years": [1934,1971,1985,1997,2003,2008,2013,2017,2020],      "C": 0.036},
+    "GB":   {"years": [1925,1952,1967,1981],                               "C": 0.044},
+    "MDG":  {"years": [1958,1979,2003,2008,2019],                          "C": 0.048},
+    "StSo": {"years": [1905,1908,1952,1971,1998,2008,2019],                "C": 0.048},
+    "Geb":  {"years": [1907,1953,1986,1998,2003],                          "C": 0.074},
+}
+
+step_taub_Elmer = 0.5
+window_taub_Elmer = 1
+
+
+### ----- Conceptual model for effective pressure -----
+
+tau_b_mean_df=pd.read_csv(out_dir / "tau_b_mean_8_glaciers.csv")
+tau_valid = tau_b_mean_df["tau_b_mean"]
+slope_valid = tau_b_mean_df["slope_values"]
+
+
+# Binning by slope
+bin_width = 1  # 1° per bin
+bins = np.arange(0, 40 + bin_width, bin_width)
+bin_indices = np.digitize(slope_valid, bins)
+bin_means = np.array([
+    tau_valid[bin_indices == i].mean() if np.any(bin_indices == i) else np.nan
+    for i in range(1, len(bins))])
+bin_centers = bins[:-1] + bin_width/2
+mask_bin = np.isfinite(bin_means)
+
+
+slope_cut = 2.0  # degrees
+slope_line = np.linspace(0, 40, 1000)
+mask_line = slope_line >= slope_cut
+
+idx = np.argsort(slope_valid) # sort by slope
+x = slope_valid[idx]
+y = tau_valid[idx]
+
+from scipy.interpolate import UnivariateSpline
+spl = UnivariateSpline(x, y, s=50) # Build a smoothed spline (s=smoothing factor: high s = very smooth)
+tau_emp = spl(slope_line)
+
+theta_min, theta_max = 0.4, 0.6
+m = 3
+
+CN_min = tau_emp * (1/theta_max)**(1/m)
+CN_max = tau_emp * (1/theta_min)**(1/m)
+
+# Channels control
+CN_channels = 0.29 * np.tan(np.radians(slope_line))**0.47
+
+# Intersection : indexes where CN_empirical_cst crosses CN_min & CN_max
+idx_min = np.argwhere(np.diff(np.sign(CN_channels - CN_min))).flatten()
+idx_max = np.argwhere(np.diff(np.sign(CN_channels - CN_max))).flatten()
+
+slope_min_intersect = slope_line[idx_min]
+slope_max_intersect = slope_line[idx_max]
+
+slope_line = slope_line[mask_line]
+tau_emp = tau_emp[mask_line]
+CN_min = CN_min[mask_line]
+CN_max = CN_max[mask_line]
+CN_channels = CN_channels[mask_line]

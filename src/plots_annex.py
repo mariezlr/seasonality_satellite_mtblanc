@@ -2,8 +2,9 @@ from utils import *
 from data_exploration import *
 import numpy as np
 import matplotlib.pyplot as plt
-import random
 import seaborn as sns
+import matplotlib.cm as cm
+
 
 velocity = np.sqrt(ds_merged['vx']**2 + ds_merged['vy']**2)
 xcount = np.sqrt(ds_merged['xcount_x']**2 + ds_merged['xcount_y']**2)
@@ -281,6 +282,127 @@ def plot_meteofrance_map():
     plt.close(fig)
 
 
+def plot_taub_per_glacier_Elmer():
+    fig, axes = plt.subplots(2, 4, figsize=(20, 10), sharex=True, sharey=True)
+    
+    axes = axes.flatten() 
+    colors = cm.tab10.colors
+
+    for i, (glacier, info) in enumerate(glaciers.items()):
+        df = pd.read_csv(out_dir / f"{glacier}.csv")
+        
+        # Sélectionner l'axe correspondant
+        ax = axes[i]
+        color = colors[i % len(colors)] 
+        
+        mask = df["slope"] < 40
+        tau_b_vals = df["tau_b"].where(mask).values.flatten()
+        slope_vals = df["slope"].where(mask).values.flatten()
+        
+        # Moyenne glissante
+        centers, mean_tau_b = moving_average(tau_b_vals, slope_vals, step_taub_Elmer, window_taub_Elmer)
+        
+        # Tracer
+        ax.scatter(slope_vals, tau_b_vals, color="grey", alpha=0.4, s=2)
+        ax.plot(centers, mean_tau_b, color=color, linewidth=2, label=fr"Mean $\tau_b$ {glacier}")
+        
+        ax.set_title(glacier, fontsize=20)
+        ax.grid(True, which='both', linestyle='--', alpha=0.5)
+        ax.legend(fontsize=18)
+
+    # Labels communs
+    fig.text(0.5, 0.04, "Slope (°)", ha='center', fontsize=22)
+    fig.text(0.04, 0.5, "Basal shear stress (MPa)", va='center', rotation='vertical', fontsize=22)
+
+    plt.tight_layout(rect=[0.05, 0.05, 1, 1])
+    fig.savefig(fig_dir / "tau_b_by_slope_all_glaciers.png")
+    plt.close(fig)
+
+
+def plot_taub_all_glaciers_Elmer():
+    all_slope = []
+    all_tau_b = []
+
+    for i, (glacier, info) in enumerate(glaciers.items()):
+        df = pd.read_csv(out_dir / f"{glacier}.csv")
+
+        mask = df["slope"] < 40        
+        all_slope.append(df["slope"].where(mask).values.flatten())
+        all_tau_b.append(df["tau_b"].where(mask).values.flatten())
+
+    all_slope = np.concatenate(all_slope)
+    all_tau_b = np.concatenate(all_tau_b)
+        
+    # Moyenne glissante
+    centers, mean_tau_b = moving_average(all_tau_b, all_slope, step_taub_Elmer, window_taub_Elmer)
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    ax.scatter(all_slope, all_tau_b, color="grey", alpha=0.3, s=2, label="All points")
+    ax.plot(centers, mean_tau_b, color="red", linewidth=2, label=fr"Mean $\tau_b$")
+
+    ax.set_xlabel("Slope (°)", fontsize=14)
+    ax.set_ylabel("Basal shear stress (MPa)", fontsize=14)
+    ax.grid(True, which='both', linestyle='--', alpha=0.5)
+    ax.legend(markerscale=5, fontsize=10)
+
+    plt.tight_layout()
+    fig.savefig(fig_dir / "tau_b_by_slope_all_glaciers_combined.png")
+    plt.close(fig)
+
+
+def plot_low_taub_location_Elmer():
+    fig, axes = plt.subplots(2, 4, figsize=(20, 12), sharex=False, sharey=False)
+    axes = axes.flatten()
+
+    # critères low-stress
+    tau_thresh = 0.03
+    slope_thresh = 5
+
+    # Pour le mappable global
+    norm = None
+    sm = None
+
+    for i, (glacier, info) in enumerate(glaciers.items()):
+        df = pd.read_csv(out_dir / f"{glacier}.csv")
+
+        ax = axes[i]
+        mask_low = (df["tau_b"] < tau_thresh) & (df["slope"] < slope_thresh)
+
+        # --- All points in grey ---
+        ax.scatter(df["xcoord"], df["ycoord"], s=2, color="lightgrey", alpha=0.5)
+
+        # --- Points with low shear stress = coloured by year ---
+        sc = ax.scatter(df.loc[mask_low, "xcoord"],
+                        df.loc[mask_low, "ycoord"],
+                        s=6,
+                        c=df.loc[mask_low, "year"],
+                        cmap="turbo",
+                        alpha=0.9)
+
+        # ScalarMappable for global colorbar
+        if sm is None:
+            sm = sc
+            norm = plt.Normalize(vmin=df.loc[mask_low, "year"].min(),
+                                vmax=df.loc[mask_low, "year"].max())
+
+        ax.set_title(glacier, fontsize=18)
+        ax.set_aspect("equal")
+        ax.grid(True, linestyle="--", alpha=0.4)
+
+    # Labels
+    fig.text(0.5, 0.04, "x (m)", ha='center', fontsize=20)
+    fig.text(0.04, 0.5, "y (m)", va='center', rotation='vertical', fontsize=20)
+
+    # Global colobar on the right
+    cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])  # [left, bottom, width, height]
+    cbar = fig.colorbar(sm, cax=cbar_ax, orientation='vertical', extend='both')
+    cbar.set_label("Year", fontsize=14)
+
+    plt.tight_layout(rect=[0, 0, 0.9, 1])  # laisser de la place pour la colorbar
+    fig.savefig(fig_dir / "map_low_taub_location_8_glaciers.png")
+    plt.close(fig)
+
 
 if __name__ == "__main__":
     plot_elevation_map()
@@ -297,3 +419,6 @@ if __name__ == "__main__":
     plot_mean_ts_all_pixels()
     plot_random_pixels_avg_year()
     plot_meteofrance_map()
+    plot_taub_per_glacier_Elmer()
+    plot_taub_all_glaciers_Elmer()
+    plot_low_taub_location_Elmer()

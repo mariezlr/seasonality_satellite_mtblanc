@@ -2,6 +2,7 @@ from utils import *
 from data_exploration import *
 from peaks import *
 from masks import *
+from melt import *
 import numpy as np
 import xarray as xr
 
@@ -168,7 +169,14 @@ slope_da = xr.DataArray(
 # Loading and aligning melt cycle
 print("Loading and aligning melt cycle...")
 
-melt_cycle_ds = xr.open_dataset(out_dir / "melt_cycle_da.nc")
+melt_da_path = Path(out_dir / "melt_cycle_da.nc")
+
+if not melt_da_path.exists():
+    print(f"File {melt_da_path} doesn't exist. Creation of the file...")
+    
+    create_melt_cycle_da(melt_da_path, melt_file, dem_da, ref_grid)
+
+melt_cycle_ds = xr.open_dataset(melt_da_path)
 melt_cycle_da = melt_cycle_ds["melt_cycle_mean"]
 melt_cycle_da = melt_cycle_da.transpose('cycle', 'y', 'x')
 

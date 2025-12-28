@@ -7,6 +7,103 @@ from typing import Optional, Dict, Any
 from rasterio.transform import Affine
 
 
+def peak_and_index(arr_1d):
+    """Returns [max_val, max_idx, min_val, min_idx] for a 1D signal."""    
+    out = np.full(4, np.nan, dtype=np.float64)  # initialise a table of size 4
+    if np.all(np.isnan(arr_1d)):
+        return out
+
+    peaks, _ = find_peaks(arr_1d)
+    troughs, _ = find_peaks(-arr_1d)
+
+    if len(peaks) > 0:
+        peak_vals = arr_1d[peaks]
+        max_peak_idx = peaks[np.nanargmax(peak_vals)]
+        out[0] = arr_1d[max_peak_idx]
+        out[1] = max_peak_idx
+
+    if len(troughs) > 0:
+        trough_vals = arr_1d[troughs]
+        min_trough_idx = troughs[np.nanargmin(trough_vals)]
+        out[2] = arr_1d[min_trough_idx]
+        out[3] = min_trough_idx
+
+    return out
+
+
+def idx_to_doy(idx_da, doy_array):
+    idx_vals = idx_da.values.astype(float)
+    valid = (
+        ~np.isnan(idx_vals) &
+        (idx_vals >= 0) &
+        (idx_vals < len(doy_array))
+    )
+    out = np.full_like(idx_vals, np.nan, dtype=float)
+    out[valid] = doy_array[idx_vals[valid].astype(int)]
+    return xr.DataArray(
+        out,
+        coords=idx_da.coords,
+        dims=idx_da.dims,
+        name=(idx_da.name or "idx") + "_doy"
+    )
+
+
+
+def export_to_geotiff(
+    da: xr.DataArray,
+    output_path: Path,
+    epsg: int = 32632,
+    metadata: Optional[Dict[str, Any]] = None,
+    nodata: Optional[float] = None,
+    dtype: str = "float32",
+) -> None:
+    """
+    Exporte un DataArray en GeoTIFF avec métadonnées et CRS.
+
+    Args:
+        da: DataArray à exporter.
+        output_path: Chemin de sortie pour le GeoTIFF.
+        epsg: Code EPSG du CRS.
+        metadata: Dictionnaire de métadonnées supplémentaires.
+        nodata: Valeur de "no data".
+        dtype: Type de données pour l'export.
+    """
+    # Définir le CRS si nécessaire
+    if not hasattr(da, "rio"):
+        raise ValueError("Le DataArray doit être compatible avec rioxarray.")
+    if da.rio.crs is None:
+        da.rio.write_crs(f"EPSG:{epsg}", inplace=True)
+
+    # Définir les métadonnées par défaut
+    default_metadata = {
+        "title": da.name.replace("_", " ").title(),
+        "description": f"Raster {da.name} computed from analysis.",
+        "units": "1" if da.name.endswith(("idx", "doy")) else "m/year",
+        "created_by": "Marie ZELLER",
+        "institution": "IGE - UGA - CNRS",
+        "date_created": str(np.datetime64("now")),
+    }
+
+    # Mettre à jour avec les métadonnées fournies
+    if metadata:
+        default_metadata.update(metadata)
+
+    da.attrs.update(default_metadata)
+
+    # Exporter en GeoTIFF
+    da.rio.to_raster(
+        output_path,
+        dtype=dtype,
+        nodata=nodata,
+        compress="LZW",
+        tiled=True,
+        blockxsize=256,
+        blockysize=256,
+    )
+    print(f"Exported {output_path.name} with metadata and CRS EPSG:{epsg}.")
+
+
+
 def compute_peaks_and_export(
     velocity_cycle_mean: xr.DataArray,
     out_dir: Path,

@@ -398,6 +398,56 @@ def plot_altitude_analysis():
     plt.tight_layout()
     fig.savefig(fig_dir / "cycles_by_altitude.pdf")
     plt.close(fig)
+
+
+
+def plot_conceptual_effective_pressure_model():
+
+    print(slope_min_intersect, slope_max_intersect)
+
+    fig, ax = plt.subplots(figsize=(7,5))
+
+    ax.plot(slope_line, tau_emp, linestyle='-', color='crimson', label='Average basal shear stress')
+
+    ax.plot(slope_line, CN_min, linestyle='-', color='orange')
+    ax.plot(slope_line, CN_max, linestyle='-', color='orange')
+    ax.fill_between(slope_line, CN_min, CN_max,
+        color="orange", alpha=0.3, label=r"$CN_{cavities}$ = $\tau_b(1/\theta)^{1/3}$ (in summer)")
+
+    ax.plot(slope_line, CN_channels,
+            color="blue", linestyle="--", label=r'$CN_{channels}$ = 0.29 tan$(\alpha)^{0.47}$ (in winter)')
+
+    # Vertical lines at the two intersections
+    plt.axvline(slope_min_intersect[-1], color='grey', linestyle=':', alpha=0.8)
+    plt.axvline(slope_max_intersect[-1], color='grey', linestyle=':', alpha=0.8)
+
+
+    # Shaded zone between the two intersections
+    plt.axvspan(slope_min_intersect[-1], slope_max_intersect[-1], color='grey', alpha=0.3, hatch='//',
+                label=f'Transition slope range : {slope_min_intersect[-1]:.2g}° - {slope_max_intersect[-1]:.2g}°')
+
+
+    ax.set_xlabel("Surface slope (°)")
+    ax.set_ylabel(fr"CN or $\tau_b$ (MPa)")
+
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+
+    x_ticks = np.arange(5, 45, 5)
+    ax.set_xticks(x_ticks)
+    ax.set_xticklabels([f"{x:.0f}" for x in x_ticks])
+
+    y_ticks = [0.05, 0.06, 0.10, 0.15, 0.20, 0.25]
+    ax.set_yticks(y_ticks)
+    ax.set_yticklabels([f"{y:.2f}" for y in y_ticks])
+
+    ax.legend(loc = "upper left")
+    ax.grid(linestyle="--")
+
+    plt.tight_layout()
+    fig.savefig(fig_dir / "N_vs_slope.pdf")
+    plt.close(fig)
+
     
 
 
@@ -408,3 +458,5 @@ if __name__ == "__main__":
     plot_daily_precip()
     plot_typical_vel_melt_cycles()
     plot_slope_map()
+    plot_altitude_analysis()
+    plot_conceptual_effective_pressure_model()
