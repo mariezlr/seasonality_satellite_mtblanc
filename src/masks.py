@@ -4,8 +4,7 @@ import numpy as np
 import xarray as xr
 import rioxarray
 from scipy.signal import welch
-import matplotlib.pyplot as plt
-
+from pathlib import Path
 
 # base_mask = vel_result.notnull().any(dim='mid_date')
 
@@ -87,45 +86,174 @@ def create_mask_snr(vel_result, snr_threshold=15):
     return mask, snr_map
 
 
-def compute_total_mask_and_export(output_file_path, xcount, vel_result, shadow_raster_path, min_valid_obs=80, threshold_xcount=100, threshold_shadow=50, snr_threshold=15):
-    # Ensure velocity result has CRS and x/y coordinates for reprojection
+# def compute_total_mask_and_export(output_file_path, xcount, vel_result, shadow_raster_path, min_valid_obs=80, threshold_xcount=100, threshold_shadow=50, snr_threshold=15):
+#     # Ensure velocity result has CRS and x/y coordinates for reprojection
+#     if not hasattr(vel_result, "rio"):
+#         vel_result = vel_result.rio.write_crs("EPSG:32632", inplace=False)
+#     elif vel_result.rio.crs is None:
+#         vel_result.rio.write_crs("EPSG:32632", inplace=True)
+
+#     base_mask = vel_result.notnull().any(dim='mid_date')
+#     base_mask = base_mask.astype('uint8')
+#     base_mask = base_mask.rio.write_crs("EPSG:32632", inplace=True)
+#     base_mask = base_mask.rio.reproject_match(vel_result)
+#     base_mask.rio.to_raster(output_file_path / "base_mask.tif")
+
+
+#     mask_xcount = create_mask_xcount(xcount, min_valid_obs, threshold_xcount)
+#     mask_xcount = mask_xcount.astype('uint8')
+#     mask_xcount = mask_xcount.rio.write_crs("EPSG:32632", inplace=True)
+#     mask_xcount = mask_xcount.rio.reproject_match(vel_result)
+#     mask_xcount.rio.to_raster(output_file_path / "mask_xcount.tif")
+
+
+#     mask_shadow = create_mask_shadow(vel_result, shadow_raster_path, threshold_shadow)
+#     mask_shadow = mask_shadow.astype('uint8')
+#     mask_shadow = mask_shadow.rio.write_crs("EPSG:32632", inplace=True)
+#     mask_shadow = mask_shadow.rio.reproject_match(vel_result)
+#     mask_shadow.rio.to_raster(output_file_path / "mask_shadow.tif")
+
+
+#     mask_snr, _ = create_mask_snr(vel_result, snr_threshold)
+#     mask_snr = mask_snr.astype('uint8')
+#     mask_snr = mask_snr.rio.write_crs("EPSG:32632", inplace=True)
+#     mask_snr = mask_snr.rio.reproject_match(vel_result)
+#     mask_snr.rio.to_raster(output_file_path / "mask_snr.tif")
+
+
+#     mask_total = base_mask & mask_xcount & mask_shadow & mask_snr
+#     mask_total.rio.to_raster(output_file_path / "mask_total.tif")
+
+#     return mask_total, base_mask, mask_xcount, mask_shadow, mask_snr
+
+
+
+def compute_total_mask_and_export(
+    output_dir: Path,
+    xcount: xr.DataArray,
+    vel_result: xr.DataArray,
+    shadow_raster_path: Path,
+    min_valid_obs: int = 80,
+    threshold_xcount: int = 100,
+    threshold_shadow: int = 50,
+    snr_threshold: int = 15,
+) -> tuple[xr.DataArray, ...]:
+    """
+    Compute and export a set of masks (base, xcount, shadow, SNR, and total) as GeoTIFFs.
+
+    Args:
+        output_dir: Directory where masks will be saved.
+        xcount: DataArray containing the xcount data.
+        vel_result: DataArray containing velocity results.
+        shadow_raster_path: Path to the shadow raster file.
+        min_valid_obs: Minimum number of valid observations for xcount mask.
+        threshold_xcount: Threshold for xcount mask.
+        threshold_shadow: Threshold for shadow mask.
+        snr_threshold: Threshold for SNR mask.
+
+    Returns:
+        Tuple of (mask_total, base_mask, mask_xcount, mask_shadow, mask_snr) as xarray.DataArray.
+    """
+    # Ensure output_dir exists
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Ensure vel_result has CRS and x/y coordinates for reprojection
     if not hasattr(vel_result, "rio"):
-        vel_result = vel_result.rio.write_crs("EPSG:32632", inplace=False)
-    elif vel_result.rio.crs is None:
+        raise ValueError("vel_result must be a rio-accessible xarray.DataArray.")
+    if vel_result.rio.crs is None:
         vel_result.rio.write_crs("EPSG:32632", inplace=True)
 
-    base_mask = vel_result.notnull().any(dim='mid_date')
-    base_mask = base_mask.astype('uint8')
-    base_mask = base_mask.rio.write_crs("EPSG:32632", inplace=True)
-    base_mask = base_mask.rio.reproject_match(vel_result)
-    base_mask.rio.to_raster(output_file_path / "base_mask.tif")
+    # --- Base mask ---
+    base_mask = vel_result.notnull().any(dim="mid_date").astype("uint8")
+    base_mask = _prepare_and_export_mask(
+        base_mask,
+        vel_result,
+        output_dir / "base_mask.tif",
+        title="Base Mask",
+        description="Mask of pixels with at least one valid observation.",
+    )
 
-
+    # --- Xcount mask ---
     mask_xcount = create_mask_xcount(xcount, min_valid_obs, threshold_xcount)
-    mask_xcount = mask_xcount.astype('uint8')
-    mask_xcount = mask_xcount.rio.write_crs("EPSG:32632", inplace=True)
-    mask_xcount = mask_xcount.rio.reproject_match(vel_result)
-    mask_xcount.rio.to_raster(output_file_path / "mask_xcount.tif")
+    mask_xcount = _prepare_and_export_mask(
+        mask_xcount,
+        vel_result,
+        output_dir / "mask_xcount.tif",
+        title="Xcount Mask",
+        description=f"Mask of pixels with xcount >= {threshold_xcount} and at least {min_valid_obs} valid observations.",
+    )
 
-
+    # --- Shadow mask ---
     mask_shadow = create_mask_shadow(vel_result, shadow_raster_path, threshold_shadow)
-    mask_shadow = mask_shadow.astype('uint8')
-    mask_shadow = mask_shadow.rio.write_crs("EPSG:32632", inplace=True)
-    mask_shadow = mask_shadow.rio.reproject_match(vel_result)
-    mask_shadow.rio.to_raster(output_file_path / "mask_shadow.tif")
+    mask_shadow = _prepare_and_export_mask(
+        mask_shadow,
+        vel_result,
+        output_dir / "mask_shadow.tif",
+        title="Shadow Mask",
+        description=f"Mask of pixels with shadow value <= {threshold_shadow}.",
+    )
 
+    # --- SNR mask ---
+    mask_snr, _ = create_mask_snr(vel_result, snr_threshold)
+    mask_snr = _prepare_and_export_mask(
+        mask_snr,
+        vel_result,
+        output_dir / "mask_snr.tif",
+        title="SNR Mask",
+        description=f"Mask of pixels with SNR >= {snr_threshold}.",
+    )
 
-    mask_snr, snr_map = create_mask_snr(vel_result, snr_threshold)
-    mask_snr = mask_snr.astype('uint8')
-    mask_snr = mask_snr.rio.write_crs("EPSG:32632", inplace=True)
-    mask_snr = mask_snr.rio.reproject_match(vel_result)
-    mask_snr.rio.to_raster(output_file_path / "mask_snr.tif")
-
-
+    # --- Total mask ---
     mask_total = base_mask & mask_xcount & mask_shadow & mask_snr
-    mask_total.rio.to_raster(output_file_path / "mask_total.tif")
+    mask_total.attrs = {
+        "title": "Total Mask",
+        "description": "Combined mask from base, xcount, shadow, and SNR masks.",
+    }
+    mask_total.rio.write_crs(vel_result.rio.crs, inplace=True)
+    mask_total.rio.to_raster(
+        output_dir / "mask_total.tif",
+        dtype="uint8",
+        nodata=0,
+        compress="LZW",
+    )
 
     return mask_total, base_mask, mask_xcount, mask_shadow, mask_snr
+
+def _prepare_and_export_mask(
+    mask: xr.DataArray,
+    reference: xr.DataArray,
+    output_path: Path,
+    title: str,
+    description: str,
+) -> xr.DataArray:
+    """
+    Prepare a mask for export: set CRS, reproject, add metadata, and export as GeoTIFF.
+
+    Args:
+        mask: Input mask as xarray.DataArray.
+        reference: Reference DataArray for CRS and reprojection.
+        output_path: Path to save the mask.
+        title: Title for the mask metadata.
+        description: Description for the mask metadata.
+
+    Returns:
+        xarray.DataArray: The prepared mask.
+    """
+    mask = mask.astype("uint8")
+    mask.attrs = {
+        "title": title,
+        "description": description,
+    }
+    mask.rio.write_crs(reference.rio.crs, inplace=True)
+    mask = mask.rio.reproject_match(reference)
+    mask.rio.to_raster(
+        output_path,
+        dtype="uint8",
+        nodata=0,
+        compress="LZW",
+    )
+    return mask
+
 
 
 
@@ -149,8 +277,6 @@ def mask_stats(mask, velocities):
     n_total_pix = velocities.isel(mid_date=0).size
     n_valid_pix = mask.sum().item()
     return n_total_pix, n_valid_pix
-
-
 
 
 

@@ -5,6 +5,14 @@ import rasterio
 from pyproj import Transformer
 from pathlib import Path
 
+
+# Définir les métadonnées globales communes
+global_attrs = {
+    "project": "Seasonality Analysis - Mont Blanc",
+    "contact": "marie.zeller@univ-grenoble-alpes.fr",
+}
+
+
 kernel = np.ones((3, 3), dtype=float) / 9.0 # uniform 3x3 kernel normalized to get the avergae
 
 
@@ -13,9 +21,9 @@ result_lowpass = False # False if we want to process the averaged detrended data
 
 slope_bins = np.arange(0, 45, 5)
 n_bins = len(slope_bins) - 1
-month_bins = np.linspace(1, 366, 13)
+month_bins = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365]
 month_starts = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335]
-mid_month_days = [15 + i*30 for i in month_starts]
+mid_month_days = [15, 45, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349]
 month_labels_short = ['J','F','M','A','M','J','J','A','S','O','N','D']
 month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
@@ -204,11 +212,11 @@ stations_mtblanc = df[
     (df["x_utm"] >= x_min_mf) & (df["x_utm"] <= x_max_mf)
 ]["NUM_POSTE"].unique()
 
-df_mtblanc = df[df["NUM_POSTE"].isin(stations_mtblanc)]
+df_mtblanc = df[df["NUM_POSTE"].isin(stations_mtblanc)].copy()
 
-df_mtblanc['date'] = pd.to_datetime(df_mtblanc['AAAAMMJJ'], format='%Y%m%d')
-df_20162022 = df_mtblanc[(df_mtblanc['date'].dt.year >= 2016) & (df_mtblanc['date'].dt.year <= 2022)]
+df_mtblanc.loc[:, 'date'] = pd.to_datetime(df_mtblanc['AAAAMMJJ'], format='%Y%m%d')
+df_20162022 = df_mtblanc[(df_mtblanc['date'].dt.year >= 2016) & (df_mtblanc['date'].dt.year <= 2022)].copy()
 
 # Grouper par date et calculer la moyenne des RR
-df_20162022['RR'] = pd.to_numeric(df_20162022['RR'], errors='coerce')
+df_20162022.loc[:, 'RR'] = pd.to_numeric(df_20162022['RR'], errors='coerce')
 ts_daily = df_20162022.groupby('date')['RR'].mean() 

@@ -1,42 +1,27 @@
 from utils import *
 from data_exploration import *
-from main import *
-import numpy as np
-import matplotlib.pyplot as plt
 
-print("Pixels slope < 10° :", np.sum((slope_arr < 10) & mask_arr))
-print("Pixels slope ≥ 15° :", np.sum((slope_arr >= 15) & mask_arr))
+import geoutils as gu
 
-def plot_slope_classes(slope_arr, mask_arr):
-    """
-    Quick visual check of slope classes.
-    Green  : slope < 10°
-    Red    : slope ≥ 15°
-    Black  : masked / ignored
-    """
+import rasterio
 
-    # Init map with NaNs
-    slope_class = np.full(slope_arr.shape, np.nan)
-
-    # Classes
-    slope_class[(slope_arr < 10) & mask_arr] = 0
-    slope_class[(slope_arr >= 15) & mask_arr] = 1
-
-    plt.figure(figsize=(6, 6))
-    im = plt.imshow(slope_class, cmap="RdYlGn_r", interpolation="none")
-    plt.colorbar(im, label="Slope class")
-
-    plt.axis("off")
-    plt.tight_layout()
-    plt.show()
-
-plot_slope_classes(slope_arr, mask_arr)
+# Ouvrir le raster de référence avec rasterio
+with rasterio.open(out_dir / "max_peak_doy.tif") as src:
+    print("Bounds:", src.bounds)  # Vérifier les bornes géographiques
+    print("Transform:", src.transform)  # Vérifier la transformation
+    print("Width:", src.width)  # Largeur du raster
+    print("Height:", src.height)  # Hauteur du raster
+    print("CRS:", src.crs)  # Vérifier le CRS
 
 
-plt.imshow(((slope_arr < 10) - (slope_arr >= 15)) * mask_arr, cmap="bwr")
-plt.colorbar()
-plt.show()
 
 
-print("Pixels slope < 10° :", np.sum((slope_arr < 10) & mask_arr))
-print("Pixels slope ≥ 15° :", np.sum((slope_arr >= 15) & mask_arr))
+import rasterio
+
+# Vérifier les propriétés de max_peak_doy.tif
+with rasterio.open(out_dir / "max_peak_doy.tif") as src:
+    print("Transformation de max_peak_doy.tif :", src.transform)
+    print("CRS de max_peak_doy.tif :", src.crs)
+    print("Bornes de max_peak_doy.tif :", src.bounds)
+
+

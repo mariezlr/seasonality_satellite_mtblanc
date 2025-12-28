@@ -231,158 +231,227 @@ def moving_average(y, x, step, window):
 
 from rasterio.warp import reproject, Resampling
 
-def load_and_interp_geotiff_to_grid(tif_path, ds, target_epsg="32632", resampling="bilinear"):
+
+
+def export_to_netcdf_with_metadata(
+    da: xr.DataArray,
+    output_path: Path,
+    title: str,
+    description: str,
+    units: str,
+    crs: str = None,
+    encoding: dict = None,
+    global_attrs: dict = None,
+) -> None:
     """
-    Charge le DEM, le reprojette en EPSG target, et l'interpole sur la grille du Dataset TICOI.
+    Exporte un DataArray en NetCDF avec métadonnées, CRS et encodage optimisé.
+
+    Args:
+        da: DataArray à exporter.
+        output_path: Chemin de sortie pour le fichier NetCDF.
+        title: Titre du jeu de données.
+        description: Description du contenu.
+        units: Unités des données.
+        crs: CRS à définir (optionnel, pour les données géospatiales).
+        encoding: Dictionnaire d'encodage pour les variables (optionnel).
+        global_attrs: Attributs globaux supplémentaires (optionnel).
     """
+    # Définir les métadonnées de base
+    da.attrs.update({
+        "title": title,
+        "description": description,
+        "units": units,
+        "created_by": "Marie ZELLER",
+        "institution": "IGE - UGA - CNRS",
+        "date_created": str(np.datetime64('now')),
+    })
 
-    with rasterio.open(tif_path) as src:
-        dem = src.read(1)  # matrice
-        src_transform = src.transform
-        src_crs = src.crs
+    # Ajouter des attributs globaux supplémentaires si fournis
+    if global_attrs:
+        da.attrs.update(global_attrs)
 
-    x = ds.x.values
-    y = ds.y.values[::-1] # y décroissant
+    # Définir le CRS si nécessaire (pour les données géospatiales)
+    if crs and hasattr(da, "rio"):
+        da.rio.write_crs(crs, inplace=True)
 
-    from rasterio.transform import from_origin
-    dx = x[1] - x[0]
-    dy = y[1] - y[0]
-    dst_transform = from_origin(x.min(), y.max(), dx, -dy)
-    dst_crs = f"EPSG:{target_epsg}"
+    # Encodage par défaut si non fourni
+    if encoding is None:
+        encoding = {da.name: {"dtype": "float32", "zlib": True, "complevel": 4}}
 
-    # grid size
-    dst_height = len(y)
-    dst_width = len(x)
-
-    dem_on_grid = np.zeros((dst_height, dst_width), dtype=np.float32)
-
-    # reprojette et interpole
-    reproject(source=dem, destination=dem_on_grid, src_transform=src_transform, src_crs=src_crs, dst_transform=dst_transform, dst_crs=dst_crs, resampling=getattr(Resampling, resampling))
-
-    return dem_on_grid[::-1, :]
-
-
-def compute_slope(dem, dx, dy):
-    """
-    Pente en radians.
-    """
-    dzdx = np.gradient(dem, axis=1) / dx
-    dzdy = -np.gradient(dem, axis=0) / dy
-
-    slope_rad = np.sqrt(dzdx**2 + dzdy**2)
-    slope_deg = np.degrees(slope_rad)
-    return slope_deg
-
-
-
-import numpy as np
-import xarray as xr
-import rasterio
-from rasterio.warp import reproject, Resampling
-from rasterio.transform import from_origin
-
-def load_geotiff_as_da(tif_path, ds_ref, target_epsg=None, resampling="bilinear", name="dem"):
-    """
-    Charge un GeoTIFF et le reprojette/interpole sur la grille d'un xarray.Dataset de référence.
-    Retourne un DataArray avec coords et CRS alignés.
-    
-    Parameters
-    ----------
-    tif_path : str or Path
-        Chemin vers le GeoTIFF à charger.
-    ds_ref : xarray.Dataset or DataArray
-        Dataset de référence pour la grille.
-    target_epsg : str or int, optional
-        EPSG cible. Si None, prend le CRS de ds_ref.
-    resampling : str, default "bilinear"
-        Méthode de resampling pour reproject.
-    name : str
-        Nom du DataArray retourné.
-    """
-    # Grille de référence
-    x = ds_ref.x.values
-    y = ds_ref.y.values[::-1]  # y décroissant
-    dx = x[1] - x[0]
-    dy = y[1] - y[0]
-    dst_transform = from_origin(x.min(), y.max(), dx, -dy)
-    dst_crs = f"EPSG:{target_epsg}" if target_epsg else ds_ref.rio.crs
-    
-    dst_shape = (len(y), len(x))
-    dst_array = np.full(dst_shape, np.nan, dtype=np.float32)
-    
-    # Charger GeoTIFF source
-    with rasterio.open(tif_path) as src:
-        src_array = src.read(1)
-        src_transform = src.transform
-        src_crs = src.crs
-    
-    # Reprojection / interpolation
-    reproject(
-        source=src_array,
-        destination=dst_array,
-        src_transform=src_transform,
-        src_crs=src_crs,
-        dst_transform=dst_transform,
-        dst_crs=dst_crs,
-        resampling=Resampling[resampling],
-        dst_nodata=np.nan
+    # Exporter en NetCDF
+    da.to_netcdf(
+        output_path,
+        engine="netcdf4",
+        encoding=encoding,
     )
-    
-    # Retourner en DataArray xarray
-    da = xr.DataArray(
-        dst_array[::-1, :],  # remettre y dans le bon ordre
-        coords={"y": ds_ref.y, "x": ds_ref.x},
-        dims=["y", "x"],
-        name=name
-    )
-    
-    da.rio.write_crs(dst_crs, inplace=True)
-    return da
+    print(f"Exported {output_path.name} with metadata and encoding.")
 
 
-from scipy.ndimage import uniform_filter
-import numpy as np
-import xarray as xr
-
-def compute_slope_da(dem_da):
+def export_to_geotiff(
+    da: xr.DataArray,
+    output_path: Path,
+    epsg: int = 32632,
+    metadata: Optional[Dict[str, Any]] = None,
+    nodata: Optional[float] = None,
+    dtype: str = "float32",
+) -> None:
     """
-    Calcul de la pente (en degrés) à partir d'un DataArray xarray DEM.
-    Assumes une grille régulière (dx, dy constants).
-    
-    Parameters
-    ----------
-    dem_da : xarray.DataArray
-        DEM déjà aligné sur la grille de référence.
+    Exporte un DataArray en GeoTIFF avec métadonnées et CRS.
 
-    Returns
-    -------
-    slope_da : xarray.DataArray
-        Pente en degrés, même coords et dims que dem_da.
+    Args:
+        da: DataArray à exporter.
+        output_path: Chemin de sortie pour le GeoTIFF.
+        epsg: Code EPSG du CRS.
+        metadata: Dictionnaire de métadonnées supplémentaires.
+        nodata: Valeur de "no data".
+        dtype: Type de données pour l'export.
     """
-    # Extraire NumPy array
-    dem_arr = dem_da.values.astype(float)
-    
-    # Résolution spatiale
-    dx = np.abs(dem_da.x[1] - dem_da.x[0])
-    dy = np.abs(dem_da.y[1] - dem_da.y[0])
-    
-    # Gradient
-    dzdx = np.gradient(dem_arr, axis=1) / dx
-    dzdy = -np.gradient(dem_arr, axis=0) / dy  # y décroissant
-    
-    # Pente en degrés
-    slope_deg = np.degrees(np.sqrt(dzdx**2 + dzdy**2))
-    
-    # Recréer DataArray xarray
-    slope_da = xr.DataArray(
-        slope_deg,
-        coords=dem_da.coords,
-        dims=dem_da.dims,
-        name="slope"
+    # Définir le CRS si nécessaire
+    if not hasattr(da, "rio"):
+        raise ValueError("Le DataArray doit être compatible avec rioxarray.")
+    if da.rio.crs is None:
+        da.rio.write_crs(f"EPSG:{epsg}", inplace=True)
+
+    # Définir les métadonnées par défaut
+    default_metadata = {
+        "title": da.name.replace("_", " ").title(),
+        "description": f"Raster {da.name} computed from analysis.",
+        "units": "1" if da.name.endswith(("idx", "doy")) else "m/year",
+        "created_by": "Marie ZELLER",
+        "institution": "IGE - UGA - CNRS",
+        "date_created": str(np.datetime64("now")),
+    }
+
+    # Mettre à jour avec les métadonnées fournies
+    if metadata:
+        default_metadata.update(metadata)
+
+    da.attrs.update(default_metadata)
+
+    # Exporter en GeoTIFF
+    da.rio.to_raster(
+        output_path,
+        dtype=dtype,
+        nodata=nodata,
+        compress="LZW",
+        tiled=True,
+        blockxsize=256,
+        blockysize=256,
     )
-    
-    # Ajouter CRS si présent
-    if hasattr(dem_da.rio, "crs") and dem_da.rio.crs is not None:
-        slope_da.rio.write_crs(dem_da.rio.crs, inplace=True)
-    
-    return slope_da
+    print(f"Exported {output_path.name} with metadata and CRS EPSG:{epsg}.")
+
+
+
+from typing import Optional, Dict, Any
+from rasterio.transform import Affine
+import tempfile
+
+def export_to_geotiff_with_metadata(
+    da: xr.DataArray,
+    output_path: Path,
+    epsg: int = 32632,
+    metadata: Optional[Dict[str, Any]] = None,
+    nodata: Optional[float] = None,
+    dtype: str = "float32",
+) -> None:
+    """
+    Exporte un DataArray en GeoTIFF avec métadonnées, CRS et options d'export optimisées.
+
+    Args:
+        da: DataArray à exporter.
+        output_path: Chemin de sortie pour le GeoTIFF.
+        epsg: Code EPSG du CRS (par défaut: 32632).
+        metadata: Dictionnaire de métadonnées supplémentaires.
+        nodata: Valeur de "no data".
+        dtype: Type de données pour l'export.
+    """
+    # Définir le CRS si nécessaire
+    if not hasattr(da, "rio"):
+        raise ValueError("Le DataArray doit être compatible avec rioxarray.")
+    if da.rio.crs is None:
+        da.rio.write_crs(f"EPSG:{epsg}", inplace=True)
+
+    # Vérifier et corriger les bornes en Y inversées
+    # Sauvegarder temporairement le DataArray pour accéder à ses propriétés de fichier
+    with tempfile.NamedTemporaryFile(suffix=".tif", delete=False) as tmp_file:
+        temp_path = Path(tmp_file.name)
+        da.rio.to_raster(temp_path, dtype=dtype, nodata=nodata)
+
+        with rasterio.open(temp_path) as src:
+            transform = src.transform
+            bounds = src.bounds
+
+            # Vérifier si les bornes en Y sont inversées (bottom > top)
+            if bounds.bottom > bounds.top:
+                print("Correction des bornes en Y inversées...")
+                # Inverser la transformation en Y
+                new_transform = Affine(
+                    transform.a,  # Résolution en X
+                    transform.b,  # Rotation
+                    transform.c,  # Origine en X
+                    -transform.e,  # Résolution en Y (inversée)
+                    -transform.d,  # Rotation
+                    transform.f + (bounds.bottom - bounds.top),  # Origine en Y corrigée
+                )
+
+                # Mettre à jour le DataArray avec la nouvelle transformation
+                da.rio.write_transform(new_transform, inplace=True)
+
+    # Définir les métadonnées par défaut
+    default_metadata = {
+        "title": da.name.replace("_", " ").title(),
+        "description": f"Raster {da.name} computed from velocity cycle analysis.",
+        "units": "1" if da.name.endswith(("idx", "doy")) else "m/year",
+        "created_by": "Marie ZELLER",
+        "institution": "IGE - UGA - CNRS",
+        "date_created": str(np.datetime64("now")),
+    }
+
+    # Mettre à jour avec les métadonnées fournies
+    if metadata:
+        default_metadata.update(metadata)
+
+    da.attrs.update(default_metadata)
+
+    # Exporter en GeoTIFF
+    da.rio.to_raster(
+        output_path,
+        dtype=dtype,
+        nodata=nodata,
+        compress="LZW",
+        tiled=True,
+        blockxsize=256,
+        blockysize=256,
+    )
+    print(f"Exported {output_path.name} with metadata and CRS EPSG:{epsg}.")
+
+import rioxarray
+
+def load_and_align_raster(path: Path, ref_grid: xr.DataArray) -> xr.DataArray:
+    """Charge et aligne un raster GeoTIFF sur une grille de référence."""
+    da = rioxarray.open_rasterio(path).squeeze()
+    return da.rio.reproject_match(ref_grid)
+
+def load_and_interp_geotiff_to_grid(geotiff_path, ref_dataarray, target_epsg="32632"):
+    """Charge un GeoTIFF, l'interpole sur la grille d'un DataArray de référence et retourne un numpy array."""
+    da = rioxarray.open_rasterio(geotiff_path).squeeze()
+    if not da.rio.crs:
+        da.rio.write_crs(target_epsg, inplace=True)
+        # S'assurer que ref_dataarray a bien ses dimensions spatiales définies
+    ref_dataarray = ref_dataarray.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
+    # Projeter da sur la grille de ref_dataarray
+    da = da.rio.reproject_match(ref_dataarray.isel({dim: 0 for dim in ref_dataarray.dims if dim != 'mid_date'}))
+    return da.values
+
+def compute_slope(elevation, dx, dy):
+    """Calcule la pente à partir d'un raster d'élévation."""
+    dy_elev, dx_elev = np.gradient(elevation)
+    # Diviser par dx et dy pour obtenir des gradients en unités d'élévation par unité de distance
+    dy_elev /= dy
+    dx_elev /= dx
+    print(f"Gradient dx: Min: {dx_elev.min()}, Max: {dx_elev.max()}")
+    print(f"Gradient dy: Min: {dy_elev.min()}, Max: {dy_elev.max()}")
+    slope_rad = np.arctan(np.sqrt(dx_elev**2 + dy_elev**2))
+    return np.degrees(slope_rad)
+
+
