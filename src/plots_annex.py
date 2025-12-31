@@ -20,6 +20,7 @@ vel_lowpass = ds_analysis["vel_lowpass"]
 vel_cycle = ds_analysis["vel_cycle"]
 avg_velocity = ds_analysis["avg_velocity"]
 amplitude = ds_analysis["amplitude"]
+amplitude_rel = ds_analysis["amplitude_rel"]
 melt_cycle = ds_analysis["melt_cycle"]
 slope = ds_analysis["slope"]
 elevation = ds_analysis["elevation"]
@@ -406,19 +407,36 @@ def plot_low_taub_location_Elmer():
 
 if __name__ == "__main__":
     plot_elevation_map()
+    print("plot_elevation_map Done !")
     plot_slope_map()
+    print("plot_slope_map Done !")
     plot_slope_distribution()
+    print("plot_slope_distribution Done !")
     plot_random_pixel_ts()
+    print("plot_random_pixel_ts Done !")
     plot_validation_pixel_ts(x_utm_Arg4_GPS, y_utm_Arg4_GPS, data_GPS_ARG4, "Arg4")
+    print("plot_validation_pixel_ts Done !")
     plot_annual_cycle_validation_point(data_GPS_ARG4, "Arg4")
+    print("plot_annual_cycle_validation_point Done !")
     plot_validation_pixel_ts(x_utm_ArgG_GPS, y_utm_ArgG_GPS, data_GPS_ARGG, "ArgG")
+    print("plot_validation_pixel_ts Done !")
     plot_annual_cycle_validation_point(data_GPS_ARGG, "ArgG")
+    print("plot_annual_cycle_validation_point Done !")
     plot_validation_pixel_ts(x_utm_Argw, y_utm_Argw, data_Argwheel, "Arg wheel")
+    print("plot_validation_pixel_ts Done !")
     plot_annual_cycle_validation_point(data_Argwheel, "Arg wheel")
+    print("plot_annual_cycle_validation_point Done !")
     plot_xcount_ts_validation_points()
+    print("plot_xcount_ts_validation_points Done !")
     plot_mean_ts_all_pixels()
+    print("plot_mean_ts_all_pixels Done !")
     plot_random_pixels_avg_year()
+    print("plot_random_pixels_avg_year Done !")
     plot_meteofrance_map()
+    print("plot_meteofrance_map Done !")
     plot_taub_per_glacier_Elmer()
+    print("plot_taub_per_glacier_Elmer Done !")
     plot_taub_all_glaciers_Elmer()
+    print("plot_taub_all_glaciers_Elmer Done !")
     plot_low_taub_location_Elmer()
+    print("plot_low_taub_location_Elmer Done !")

@@ -14,3 +14,6 @@ __pycache__/
 
 # Ignore les fichiers temporaires Jupyter
 .ipynb_checkpoints/
+
+# Ignore les fichiers de test
+**/test*

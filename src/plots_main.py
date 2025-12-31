@@ -19,6 +19,7 @@ vel_lowpass = ds_analysis["vel_lowpass"]
 vel_cycle = ds_analysis["vel_cycle"]
 avg_velocity = ds_analysis["avg_velocity"]
 amplitude = ds_analysis["amplitude"]
+amplitude_rel = ds_analysis["amplitude_rel"]
 melt_cycle = ds_analysis["melt_cycle"]
 slope = ds_analysis["slope"]
 elevation = ds_analysis["elevation"]
@@ -183,7 +184,7 @@ def plot_histogram_inflex_slope():
     for i in range(n_bins):
         mask = ((slope >= slope_bins[i]) & (slope < slope_bins[i+1]) & result_mask)
 
-        valinflex = max_peak_doy.where(mask)
+        valinflex = inflex_doy.where(mask)
         valinflex = valinflex.where(~np.isnan(valinflex))
         doyinflex_all[i].extend(valinflex.values.flatten())
 
@@ -311,7 +312,7 @@ def plot_typical_vel_melt_cycles():
     plt.close(fig)
 
 
-def plot_slope_map():
+def plot_slope_repartition():
     # Définir les classes de pente (en degrés)
     slope_bins = np.arange(0, 65, 10)
     n_bins = len(slope_bins) - 1
@@ -355,6 +356,7 @@ def plot_altitude_analysis():
     min_vals = min_peak_doy.where(result_mask).values.flatten()
     avg_vals = avg_velocity.where(result_mask).values.flatten()
     ampl_vals = amplitude.where(result_mask).values.flatten()
+    relampl_vals = amplitude_rel.where(result_mask).values.flatten()
 
     # Moyenne glissante
     step = 10       # pas entre les centres (10 m)
@@ -366,13 +368,15 @@ def plot_altitude_analysis():
     centers, mean_mindoy = moving_average(min_vals, z_vals, step, window)
     centers, mean_avg = moving_average(avg_vals, z_vals, step, window)
     centers, mean_ampl = moving_average(ampl_vals, z_vals, step, window)
-
+    centers, mean_relampl = moving_average(relampl_vals, z_vals, step, window)
+    
 
     fig, ax1 = plt.subplots(figsize=(6,5))
 
     # Axe gauche : vitesse et amplitude
     ax1.plot(centers, mean_avg, color='limegreen', label='Average velocity')
     ax1.plot(centers, mean_ampl, color='darkorange', label='Amplitude')
+    ax1.plot(centers, mean_relampl, color='crimson', label='Relative amplitude')
     ax1.set_xlabel('Elevation (m)')
     ax1.set_ylabel('Velocity / Amplitude (m/yr)')
     ax1.grid(True, which='both', linestyle='--')
@@ -397,6 +401,40 @@ def plot_altitude_analysis():
 
     plt.tight_layout()
     fig.savefig(fig_dir / "cycles_by_altitude.pdf")
+    plt.close(fig)
+
+
+
+def plot_relative_amplitude_vs_slope():
+
+    slope_vals = slope.where(result_mask).values.flatten()
+    relampl_vals = amplitude_rel.where(result_mask).values.flatten()
+
+    # Filter slopes <40°
+    mask = (slope_vals >= 0) & (slope_vals <= 40)
+    slope_vals_filtered = slope_vals[mask]
+    relampl_vals_filtered = relampl_vals[mask]
+
+    # Moyenne glissante
+    step = 1       # pas entre les centres (10 m)
+    window = 5    # largeur de la fenêtre glissante (200 m)
+
+    centers, mean_relampl = moving_average(relampl_vals_filtered, slope_vals_filtered, step, window)
+    
+
+    fig, ax = plt.subplots(figsize=(6,5))
+
+    # Axe gauche : vitesse et amplitude
+    ax.plot(centers, mean_relampl, color='crimson', label='Relative amplitude')
+    ax.set_xlabel('Slope (°)')
+    ax.set_ylabel('Relative Amplitude')
+    ax.grid(True, which='both', linestyle='--')
+
+    # Légendes
+    ax.legend()
+
+    plt.tight_layout()
+    fig.savefig(fig_dir / "amplitude_vs_slope.pdf")
     plt.close(fig)
 
 
@@ -453,10 +491,18 @@ def plot_conceptual_effective_pressure_model():
 
 if __name__ == "__main__":
     plot_random_timeseries()
-    plot_histogram_extrema_slope()
+    print("plot_random_timeseries Done !")
     plot_histogram_inflex_slope()
+    print("plot_histogram_inflex_slope Done !")
     plot_daily_precip()
+    print("plot_daily_precip Done !")
     plot_typical_vel_melt_cycles()
-    plot_slope_map()
+    print("plot_typical_vel_melt_cycles Done !")
+    plot_slope_repartition()
+    print("plot_slope_repartition Done !")
     plot_altitude_analysis()
+    print("plot_altitude_analysis Done !")
+    plot_relative_amplitude_vs_slope()
+    print("plot_relative_amplitude_vs_slope Done !")
     plot_conceptual_effective_pressure_model()
+    print("plot_conceptual_effective_pressure_model Done !")

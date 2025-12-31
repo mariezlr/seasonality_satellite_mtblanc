@@ -82,6 +82,10 @@ print("Computing peaks and inflexion points...")
 peaks_ds = compute_peaks_and_export(velocity_cycle_mean, out_dir=out_dir, epsg=32632)
 inflex_ds = compute_inflex_and_export(velocity_cycle_mean, out_dir=out_dir, epsg=32632)
 
+amplitude = (peaks_ds["max_peak_vals"] - peaks_ds["min_peak_vals"])
+avg_velocity = velocity_cycle_mean.mean(dim="cycle")
+amplitude_rel = (peaks_ds["max_peak_vals"] - peaks_ds["min_peak_vals"]) / avg_velocity
+
 # Computing masks
 print("Computing masks...")
 
@@ -126,14 +130,6 @@ print("Processing DEM and computing slope...")
 
 dem_interp = load_and_align_raster(dem_file, ref_grid)
 
-# Visualiser dem_interp
-import matplotlib.pyplot as plt
-plt.imshow(dem_interp, cmap='viridis')
-plt.colorbar()
-plt.title("Carte d'élévation'")
-plt.show()
-
-
 dem_da = xr.DataArray(
     dem_interp,
     coords={"y": ref_grid.y, "x": ref_grid.x},
@@ -151,13 +147,6 @@ slope_interp = compute_slope(dem_interp, dx, dy)
 print("Statistiques de slope_interp :")
 print(f"Min: {np.nanmin(slope_interp)}, Max: {np.nanmax(slope_interp)}")
 print(f"Moyenne: {np.nanmean(slope_interp)}, Écart-type: {np.nanstd(slope_interp)}")
-
-# Visualiser slope_interp
-import matplotlib.pyplot as plt
-plt.imshow(slope_interp, cmap='viridis', vmin=0, vmax=80)
-plt.colorbar()
-plt.title("Carte de pente")
-plt.show()
 
 slope_da = xr.DataArray(
     slope_interp,
@@ -188,34 +177,35 @@ melt_cycle_da = melt_cycle_da.rio.reproject_match(ref_grid)
 # Applying global mask
 print("Applying global mask...")
 
-vel_masked = vel_result#.where(mask_valid)
-slope_masked = slope_da#.where(mask_valid)
-dem_masked = dem_da#.where(mask_valid)
-amplitude_masked = (peaks_ds["max_peak_vals"] - peaks_ds["min_peak_vals"])#.where(mask_valid)
-avg_velocity_masked = velocity_cycle_mean.mean(dim="cycle")#.where(mask_valid)
-melt_cycle_masked = melt_cycle_da#.where(mask_valid)
-
-max_peak_doy_masked = max_peak_doy#.where(mask_valid)
-min_peak_doy_masked = min_peak_doy#.where(mask_valid)
-inflex_doy_masked = inflex_doy#.where(mask_valid)
+vel_masked = vel_result.where(mask_valid)
+slope_masked = slope_da.where(mask_valid)
+dem_masked = dem_da.where(mask_valid)
+amplitude_masked = amplitude.where(mask_valid)
+amplitude_rel_masked = amplitude_rel.where(mask_valid)
+avg_velocity_masked = avg_velocity.where(mask_valid)
+melt_cycle_masked = melt_cycle_da.where(mask_valid)
+max_peak_doy_masked = max_peak_doy.where(mask_valid)
+min_peak_doy_masked = min_peak_doy.where(mask_valid)
+inflex_doy_masked = inflex_doy.where(mask_valid)
 
 # Creating and saving final dataset
 print("Creating and saving final dataset...")
 
 ds_analysis = xr.Dataset(
     {
-        "velocity": vel_masked,
+        "velocity": vel_result,
         "vel_detrended": vel_avg_detrended,
         "vel_lowpass": vel_lowpass,
         "vel_cycle": velocity_cycle_mean,
-        "avg_velocity": avg_velocity_masked,
-        "amplitude": amplitude_masked,
-        "melt_cycle": melt_cycle_masked,
-        "slope": slope_masked,
-        "elevation": dem_masked,
-        "max_peak_doy": max_peak_doy_masked,
-        "min_peak_doy": min_peak_doy_masked,
-        "inflex_doy": inflex_doy_masked,
+        "avg_velocity": avg_velocity,
+        "amplitude": amplitude,
+        "amplitude_rel": amplitude_rel,
+        "melt_cycle": melt_cycle_da,
+        "slope": slope_da,
+        "elevation": dem_da,
+        "max_peak_doy": max_peak_doy,
+        "min_peak_doy": min_peak_doy,
+        "inflex_doy": inflex_doy,
         "mask": mask_valid,
     }
 )
