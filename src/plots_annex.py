@@ -28,11 +28,15 @@ max_peak_doy = ds_analysis["max_peak_doy"]
 min_peak_doy = ds_analysis["min_peak_doy"]
 inflex_doy = ds_analysis["inflex_doy"]
 result_mask = ds_analysis["mask"]
-
+mask_xcount = ds_analysis["mask_xcount"]
+mask_shadow = ds_analysis["mask_shadow"]
+mask_snr = ds_analysis["mask_snr"]
+base_mask = ds_analysis["base_mask"]
 
 valid_vel_mask = ~vel_cycle.isnull().all(dim='cycle')
 valid_indices = np.argwhere(valid_vel_mask.values)
 
+sns.set_theme(style='whitegrid')
 
 
 def plot_elevation_map():
@@ -65,6 +69,7 @@ def plot_elevation_map():
 
     plt.tight_layout()
     fig.savefig(fig_dir / "elevation_map.png", bbox_inches='tight')
+    print("plot_elevation_map Done !")
     plt.close(fig)
 
 
@@ -94,6 +99,7 @@ def plot_slope_map():
     # Sauvegarder et afficher le graphique
     plt.tight_layout()
     fig.savefig(fig_dir / "slope_map.png", bbox_inches='tight')
+    print("plot_slope_map Done !")
     plt.close(fig)
 
 
@@ -118,6 +124,7 @@ def plot_slope_distribution():
     # Sauvegarder et afficher le graphique
     plt.tight_layout()
     fig.savefig(fig_dir / "slope_distribution.png", bbox_inches='tight')
+    print("plot_slope_distribution Done !")
     plt.close(fig)
 
 
@@ -148,6 +155,7 @@ def plot_random_pixel_ts():
 
     plt.tight_layout()
     fig.savefig(fig_dir / "random_pixel_ts.png")
+    print("plot_random_pixel_ts Done !")
     plt.close(fig)
 
 
@@ -181,6 +189,7 @@ def plot_validation_pixel_ts(x0, y0, df_data, name):
 
     plt.tight_layout()
     fig.savefig(fig_dir / f"validation_{name}.png")
+    print("plot_validation_pixel_ts Done !")
     plt.close(fig)
 
 
@@ -198,6 +207,7 @@ def plot_annual_cycle_validation_point(df, name):
 
     plt.tight_layout()
     fig.savefig(fig_dir / f"annual_cycle_{name}.png")
+    print("plot_annual_cycle_validation_point Done !")
     plt.close(fig)
 
 
@@ -218,6 +228,7 @@ def plot_xcount_ts_validation_points():
 
     plt.tight_layout()
     fig.savefig(fig_dir / "arg_xcount.png")
+    print("plot_xcount_ts_validation_points Done !")
     plt.close(fig)
 
 
@@ -235,6 +246,7 @@ def plot_mean_ts_all_pixels():
     plt.grid(True)
     plt.tight_layout()
     fig.savefig(fig_dir / "mean_ts_all_pixels.png")
+    print("plot_mean_ts_all_pixels Done !")
     plt.close(fig)
 
 
@@ -254,6 +266,7 @@ def plot_random_pixels_avg_year():
 
     plt.tight_layout()
     fig.savefig(fig_dir / "avg_vel_random_pixels.png")
+    print("plot_random_pixels_avg_year Done !")
     plt.close(fig)
 
 
@@ -280,6 +293,7 @@ def plot_meteofrance_map():
 
     plt.tight_layout()
     fig.savefig(fig_dir / "map_stations_meteo.png")
+    print("plot_meteofrance_map Done !")
     plt.close(fig)
 
 
@@ -317,6 +331,7 @@ def plot_taub_per_glacier_Elmer():
 
     plt.tight_layout(rect=[0.05, 0.05, 1, 1])
     fig.savefig(fig_dir / "tau_b_by_slope_all_glaciers.png")
+    print("plot_taub_per_glacier_Elmer Done !")
     plt.close(fig)
 
 
@@ -349,6 +364,7 @@ def plot_taub_all_glaciers_Elmer():
 
     plt.tight_layout()
     fig.savefig(fig_dir / "tau_b_by_slope_all_glaciers_combined.png")
+    print("plot_taub_all_glaciers_Elmer Done !")
     plt.close(fig)
 
 
@@ -402,41 +418,25 @@ def plot_low_taub_location_Elmer():
 
     plt.tight_layout(rect=[0, 0, 0.9, 1])  # laisser de la place pour la colorbar
     fig.savefig(fig_dir / "map_low_taub_location_8_glaciers.png")
+    print("plot_low_taub_location_Elmer Done !")
     plt.close(fig)
 
 
 if __name__ == "__main__":
     plot_elevation_map()
-    print("plot_elevation_map Done !")
     plot_slope_map()
-    print("plot_slope_map Done !")
     plot_slope_distribution()
-    print("plot_slope_distribution Done !")
     plot_random_pixel_ts()
-    print("plot_random_pixel_ts Done !")
     plot_validation_pixel_ts(x_utm_Arg4_GPS, y_utm_Arg4_GPS, data_GPS_ARG4, "Arg4")
-    print("plot_validation_pixel_ts Done !")
     plot_annual_cycle_validation_point(data_GPS_ARG4, "Arg4")
-    print("plot_annual_cycle_validation_point Done !")
     plot_validation_pixel_ts(x_utm_ArgG_GPS, y_utm_ArgG_GPS, data_GPS_ARGG, "ArgG")
-    print("plot_validation_pixel_ts Done !")
     plot_annual_cycle_validation_point(data_GPS_ARGG, "ArgG")
-    print("plot_annual_cycle_validation_point Done !")
     plot_validation_pixel_ts(x_utm_Argw, y_utm_Argw, data_Argwheel, "Arg wheel")
-    print("plot_validation_pixel_ts Done !")
     plot_annual_cycle_validation_point(data_Argwheel, "Arg wheel")
-    print("plot_annual_cycle_validation_point Done !")
     plot_xcount_ts_validation_points()
-    print("plot_xcount_ts_validation_points Done !")
     plot_mean_ts_all_pixels()
-    print("plot_mean_ts_all_pixels Done !")
     plot_random_pixels_avg_year()
-    print("plot_random_pixels_avg_year Done !")
     plot_meteofrance_map()
-    print("plot_meteofrance_map Done !")
     plot_taub_per_glacier_Elmer()
-    print("plot_taub_per_glacier_Elmer Done !")
     plot_taub_all_glaciers_Elmer()
-    print("plot_taub_all_glaciers_Elmer Done !")
     plot_low_taub_location_Elmer()
-    print("plot_low_taub_location_Elmer Done !")

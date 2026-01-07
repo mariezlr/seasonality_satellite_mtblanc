@@ -26,8 +26,13 @@ elevation = ds_analysis["elevation"]
 max_peak_doy = ds_analysis["max_peak_doy"]
 min_peak_doy = ds_analysis["min_peak_doy"]
 inflex_doy = ds_analysis["inflex_doy"]
-result_mask = ds_analysis["mask"]
+base_mask = ds_analysis["base_mask"]
+result_mask = ds_analysis["mask"] & base_mask
+mask_xcount = ds_analysis["mask_xcount"] & base_mask
+mask_shadow = ds_analysis["mask_shadow"] & base_mask
+mask_snr = ds_analysis["mask_snr"] & base_mask
 
+sns.set_theme(style='whitegrid')
 
 
 def plot_random_timeseries(n_samples=6, seed=42):
@@ -103,6 +108,8 @@ def plot_random_timeseries(n_samples=6, seed=42):
 
     plt.tight_layout(rect=[0, 0, 0.93, 1])
     fig.savefig(fig_dir / "random_timeseries.pdf", bbox_inches='tight')
+    fig.savefig(fig_dir / "random_timeseries.png", bbox_inches='tight')
+    print("plot_random_timeseries Done !")
     plt.close(fig)
 
 
@@ -169,6 +176,8 @@ def plot_histogram_extrema_slope():
     sub_right.text(0.01, 1, '(b)', fontsize=26, fontweight='bold', va='top')
 
     fig.savefig(fig_dir / "doy_distrib_max_min.pdf", bbox_inches='tight')
+    fig.savefig(fig_dir / "doy_distrib_max_min.png", bbox_inches='tight')
+    print("plot_histogram_extrema_slope Done !")
     plt.close(fig)
 
 
@@ -207,6 +216,8 @@ def plot_histogram_inflex_slope():
     fig.supylabel("Occurrences", fontsize=20)
 
     fig.savefig(fig_dir / "doy_distrib_inflex.pdf", bbox_inches='tight')
+    fig.savefig(fig_dir / "doy_distrib_inflex.png", bbox_inches='tight')
+    print("plot_histogram_inflex_slope Done !")
     plt.close(fig)
 
 
@@ -255,6 +266,7 @@ def plot_daily_precip():
 
     plt.tight_layout()
     fig.savefig(fig_dir / "daily_vel_precip.png")
+    print("plot_daily_precip Done !")
     plt.close(fig)
 
 
@@ -281,8 +293,8 @@ def plot_typical_vel_melt_cycles():
 
     fig, ax1 = plt.subplots(figsize=(8, 5))
 
-    ax1.plot(mean_vel_flat['doy_approx'], mean_vel_flat, label="Slope < 10°", color='limegreen')
-    ax1.plot(mean_vel_steep['doy_approx'], mean_vel_steep, label=r"Slope $\geq$ 15°", color='crimson')
+    ax1.plot(mean_vel_flat['doy_approx'], mean_vel_flat, label="slope < 10°", color='limegreen')
+    ax1.plot(mean_vel_steep['doy_approx'], mean_vel_steep, label=r"slope $\geq$ 15°", color='crimson')
     ax1.set_xlabel("Day of year", fontsize=14)
     ax1.set_ylabel(r"Velocity (m yr$^{-1}$)", color='black', fontsize=14)
     ax1.tick_params(axis='y', labelcolor='black')
@@ -309,6 +321,196 @@ def plot_typical_vel_melt_cycles():
 
     plt.tight_layout()
     fig.savefig(fig_dir / "typical_seasonal_vel_melt_cycles.pdf")
+    fig.savefig(fig_dir / "typical_seasonal_vel_melt_cycles.png")
+    print("plot_typical_vel_melt_cycles Done !")
+    plt.close(fig)
+
+
+
+def plot_vel_melt_cycles(min_slope, max_slope):
+
+    if (min_slope + max_slope)/2 < 10:
+        color_vel = 'limegreen'
+        color_bins = ['#00ffff', '#3399ff', '#6666ff']    
+    else:
+        color_vel = 'crimson'
+        color_bins = ['#ffcc00', '#ff3300', '#cc0000']     
+
+    bins_temp = np.linspace(min_slope, max_slope, 4)
+
+    # Build 2D slope masks (numpy -> xarray)
+    mask_flat_2d = (slope >= bins_temp[0]) & (slope < bins_temp[1]) & result_mask
+    mask_mid_2d = (slope >= bins_temp[1]) & (slope < bins_temp[2]) & result_mask
+    mask_steep_2d = (slope >= bins_temp[2]) & (slope < bins_temp[3]) & result_mask
+
+    mask_all_2d = (slope >= bins_temp[0]) & (slope < bins_temp[3]) & result_mask
+
+    # Convert to xarray DataArray with spatial coordinates
+    mask_flat = xr.DataArray(mask_flat_2d, dims=("y", "x"),
+        coords={"y": vel_result.y, "x": vel_result.x})
+    
+    mask_mid = xr.DataArray(mask_mid_2d, dims=("y", "x"),
+        coords={"y": vel_result.y, "x": vel_result.x})
+
+    mask_steep = xr.DataArray(mask_steep_2d, dims=("y", "x"),
+        coords={"y": vel_result.y, "x": vel_result.x})
+
+    mask_all = xr.DataArray(mask_all_2d, dims=("y", "x"),
+        coords={"y": vel_result.y, "x": vel_result.x})
+    
+    # Masks applied to velocity cycles
+    mean_vel_all = vel_cycle.where(mask_all).mean(dim=["x","y"], skipna=True)[5:-5]
+    mean_vel_flat = vel_cycle.where(mask_flat).mean(dim=["x","y"], skipna=True)[5:-5]
+    mean_vel_mid = vel_cycle.where(mask_mid).mean(dim=["x","y"], skipna=True)[5:-5]
+    mean_vel_steep = vel_cycle.where(mask_steep).mean(dim=["x","y"], skipna=True)[5:-5]
+
+    mean_vel_all = mean_vel_all - mean_vel_all.mean()
+    mean_vel_flat = mean_vel_flat - mean_vel_flat.mean()
+    mean_vel_mid = mean_vel_mid - mean_vel_mid.mean()
+    mean_vel_steep = mean_vel_steep - mean_vel_steep.mean()
+
+    # Masks applied to melt rate cycles
+    mean_melt_flat = melt_cycle.where(mask_flat).mean(dim=["x","y"], skipna=True)
+    mean_melt_mid = melt_cycle.where(mask_mid).mean(dim=["x","y"], skipna=True)
+    mean_melt_steep = melt_cycle.where(mask_steep).mean(dim=["x","y"], skipna=True)
+
+    fig, ax1 = plt.subplots(figsize=(8, 5))
+
+    #ax1.plot(mean_vel_all['doy_approx'], mean_vel_all, label=fr" {min_slope}° $\leq$ slope < {max_slope}°", color=color_vel)
+    ax1.plot(mean_vel_flat['doy_approx'], mean_vel_flat, color=color_bins[0])
+    ax1.plot(mean_vel_mid['doy_approx'], mean_vel_mid, color=color_bins[1])
+    ax1.plot(mean_vel_steep['doy_approx'], mean_vel_steep, color=color_bins[2])
+    ax1.set_xlabel("Day of year", fontsize=14)
+    ax1.set_ylabel(r"Normalized Velocity (m yr$^{-1}$)", color='black', fontsize=14)
+    ax1.tick_params(axis='y', labelcolor='black')
+    ax1.legend(loc='upper left')
+    ax1.grid(True)
+
+    # Axe y droit pour débit
+    ax2 = ax1.twinx()
+
+    ax2.plot(mean_melt_flat['doy_approx'], mean_melt_flat, color=color_bins[0], linestyle="--", alpha=0.7, label=fr" {bins_temp[0]:.0f}° $\leq$ slope < {bins_temp[1]:.0f}°")
+    ax2.plot(mean_melt_mid['doy_approx'], mean_melt_mid, color=color_bins[1], linestyle="--", alpha=0.7, label=fr" {bins_temp[1]:.0f}° $\leq$ slope < {bins_temp[2]:.0f}°")
+    ax2.plot(mean_melt_steep['doy_approx'], mean_melt_steep, color=color_bins[2], linestyle = "--", alpha=0.7, label=fr" {bins_temp[2]:.0f}° $\leq$ slope < {bins_temp[3]:.0f}°")
+    ax2.set_ylabel(r"Melt rate (m w.e. day$^{-1}$)", color='blue', alpha=0.7)
+    ax2.tick_params(axis='y', labelcolor='blue')
+    ax2.legend(loc='upper right')
+    ax2.grid(True, which='both', axis='y', linestyle='--', color='blue', alpha=0.3)
+
+    # Ajout des labels mois en x (sur ax1)
+    month_starts = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335]
+    month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    ax1.set_xticks(month_starts)
+    ax1.set_xticklabels(month_labels)
+
+    #plt.title("Normalized seasonal velocity cycle by slope class & annual melt rate cycle")
+
+    plt.tight_layout()
+    fig.savefig(fig_dir / f"seasonal_vel_melt_cycles_{min_slope}_{max_slope}.pdf")
+    fig.savefig(fig_dir / f"seasonal_vel_melt_cycles_{min_slope}_{max_slope}.png")
+    print(f"plot_vel_melt_cycles_{min_slope}_{max_slope} Done !")
+    plt.close(fig)
+
+
+
+def plot_comp_vel_melt_cycles(min_slope1, max_slope1, min_slope2, max_slope2):
+
+    fig, axes = plt.subplots(2, 1, figsize=(8, 8))
+
+    for i in range(2):
+        ax=axes[i]
+
+        if i==0:
+            color_vel = 'limegreen'
+            color_bins = ['#00ffff', '#3399ff', '#6666ff']  
+            min_slope, max_slope = min_slope1, max_slope1  
+        else:
+            color_vel = 'crimson'
+            color_bins = ['#ffcc00', '#ff3300', '#cc0000']     
+            min_slope, max_slope = min_slope2, max_slope2  
+
+        bins_temp = np.linspace(min_slope, max_slope, 4)
+
+        # Build 2D slope masks (numpy -> xarray)
+        mask_flat_2d = (slope >= bins_temp[0]) & (slope < bins_temp[1]) & result_mask
+        mask_mid_2d = (slope >= bins_temp[1]) & (slope < bins_temp[2]) & result_mask
+        mask_steep_2d = (slope >= bins_temp[2]) & (slope < bins_temp[3]) & result_mask
+
+        mask_all_2d = (slope >= bins_temp[0]) & (slope < bins_temp[3]) & result_mask
+
+        # Convert to xarray DataArray with spatial coordinates
+        mask_flat = xr.DataArray(mask_flat_2d, dims=("y", "x"),
+            coords={"y": vel_result.y, "x": vel_result.x})
+
+        mask_mid = xr.DataArray(mask_mid_2d, dims=("y", "x"),
+            coords={"y": vel_result.y, "x": vel_result.x})
+
+        mask_steep = xr.DataArray(mask_steep_2d, dims=("y", "x"),
+            coords={"y": vel_result.y, "x": vel_result.x})
+
+        mask_all = xr.DataArray(mask_all_2d, dims=("y", "x"),
+            coords={"y": vel_result.y, "x": vel_result.x})
+        
+
+        # Rescaling between 0 and 1 for each point (x, y)
+        vel_min = vel_cycle.min(dim="cycle")
+        vel_max = vel_cycle.max(dim="cycle")
+        vel_rescaled = (vel_cycle - vel_min) / (vel_max - vel_min)
+
+        # Masks applied to velocity cycles
+        mean_vel_all = vel_rescaled.where(mask_all).mean(dim=["x","y"], skipna=True)[5:-5]
+        mean_vel_flat = vel_rescaled.where(mask_flat).mean(dim=["x","y"], skipna=True)[5:-5]
+        mean_vel_mid = vel_rescaled.where(mask_mid).mean(dim=["x","y"], skipna=True)[5:-5]
+        mean_vel_steep = vel_rescaled.where(mask_steep).mean(dim=["x","y"], skipna=True)[5:-5]
+
+        mean_vel_all = (mean_vel_all - mean_vel_all.min()) / (mean_vel_all.max() - mean_vel_all.min())
+        mean_vel_flat = (mean_vel_flat - mean_vel_flat.min()) / (mean_vel_flat.max() - mean_vel_flat.min())
+        mean_vel_mid = (mean_vel_mid - mean_vel_mid.min()) / (mean_vel_mid.max() - mean_vel_mid.min())
+        mean_vel_steep = (mean_vel_steep - mean_vel_steep.min()) / (mean_vel_steep.max() - mean_vel_steep.min())
+
+        # Masks applied to melt rate cycles
+        mean_melt_flat = melt_cycle.where(mask_flat).mean(dim=["x","y"], skipna=True)
+        mean_melt_mid = melt_cycle.where(mask_mid).mean(dim=["x","y"], skipna=True)
+        mean_melt_steep = melt_cycle.where(mask_steep).mean(dim=["x","y"], skipna=True)
+
+        #ax1.plot(mean_vel_all['doy_approx'], mean_vel_all, label=fr" {min_slope}° $\leq$ slope < {max_slope}°", color=color_vel)
+        ax.plot(mean_vel_flat['doy_approx'], mean_vel_flat, color=color_bins[0])
+        ax.plot(mean_vel_mid['doy_approx'], mean_vel_mid, color=color_bins[1])
+        ax.plot(mean_vel_steep['doy_approx'], mean_vel_steep, color=color_bins[2])
+        ax.set_xlabel("Day of year", fontsize=14)
+        ax.set_ylabel(r"Normalized Velocity (m yr$^{-1}$)", color='black', fontsize=14)
+        ax.tick_params(axis='y', labelcolor='black')
+        ax.legend(loc='upper left')
+        ax.grid(True)
+
+        # Axe y droit pour débit
+        ax2 = ax.twinx()
+
+        ax2.plot(mean_melt_flat['doy_approx'], mean_melt_flat, color=color_bins[0], linestyle="--", alpha=0.7, label=fr" {bins_temp[0]:.0f}° $\leq$ slope < {bins_temp[1]:.0f}°")
+        ax2.plot(mean_melt_mid['doy_approx'], mean_melt_mid, color=color_bins[1], linestyle="--", alpha=0.7, label=fr" {bins_temp[1]:.0f}° $\leq$ slope < {bins_temp[2]:.0f}°")
+        ax2.plot(mean_melt_steep['doy_approx'], mean_melt_steep, color=color_bins[2], linestyle = "--", alpha=0.7, label=fr" {bins_temp[2]:.0f}° $\leq$ slope < {bins_temp[3]:.0f}°")
+        ax2.set_ylabel(r"Melt rate (m w.e. day$^{-1}$)", color='blue', alpha=0.7)
+        ax2.tick_params(axis='y', labelcolor='blue')
+        ax2.set_ylim(0,0.12)
+        ax2.legend(loc='upper right')
+        ax2.grid(True, which='both', axis='y', linestyle='--', color='blue', alpha=0.3)
+
+        # Ajout des labels mois en x (sur ax1)
+        month_starts = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335]
+        month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        ax.set_xticks(month_starts)
+        ax.set_xticklabels(month_labels)
+
+    # Ajout des labels (a) et (b)
+    fig.text(0.01, 1, '(a)', fontsize=26, fontweight='bold', va='top')
+    fig.text(0.01, 0.5, '(b)', fontsize=26, fontweight='bold', va='top')
+    
+    #plt.title("Normalized seasonal velocity cycle by slope class & annual melt rate cycle")
+
+    plt.tight_layout()
+    fig.savefig(fig_dir / f"seasonal_velrescaled_melt_cycles_{min_slope1}_{max_slope1}_{min_slope2}_{max_slope2}.pdf")
+    fig.savefig(fig_dir / f"seasonal_velrescaled_melt_cycles_{min_slope1}_{max_slope1}_{min_slope2}_{max_slope2}.png")
+    print(f"plot_comp_vel_melt_cycles_{min_slope1}_{max_slope1}_{min_slope2}_{max_slope2} Done !")
     plt.close(fig)
 
 
@@ -345,6 +547,8 @@ def plot_slope_repartition():
 
     plt.tight_layout()
     fig.savefig(fig_dir / "map_slope_bins.pdf")
+    fig.savefig(fig_dir / "map_slope_bins.png")
+    print("plot_slope_repartition Done !")
     plt.close(fig)
 
 
@@ -401,6 +605,8 @@ def plot_altitude_analysis():
 
     plt.tight_layout()
     fig.savefig(fig_dir / "cycles_by_altitude.pdf")
+    fig.savefig(fig_dir / "cycles_by_altitude.png")
+    print("plot_altitude_analysis Done !")
     plt.close(fig)
 
 
@@ -410,31 +616,47 @@ def plot_relative_amplitude_vs_slope():
     slope_vals = slope.where(result_mask).values.flatten()
     relampl_vals = amplitude_rel.where(result_mask).values.flatten()
 
+    melt_summer = melt_cycle.where((melt_cycle['doy_approx'] > 140) & (melt_cycle['doy_approx'] <= 300))
+    avg_melt_summer = melt_summer.mean(dim=["cycle"], skipna=True)
+    melt_vals = avg_melt_summer.where(result_mask).values.flatten()
+
+
     # Filter slopes <40°
     mask = (slope_vals >= 0) & (slope_vals <= 40)
     slope_vals_filtered = slope_vals[mask]
     relampl_vals_filtered = relampl_vals[mask]
+    melt_vals_filtered = melt_vals[mask]
 
     # Moyenne glissante
-    step = 1       # pas entre les centres (10 m)
-    window = 5    # largeur de la fenêtre glissante (200 m)
+    step = 1       # pas entre les centres (1°)
+    window = 8    # largeur de la fenêtre glissante (5°)
 
     centers, mean_relampl = moving_average(relampl_vals_filtered, slope_vals_filtered, step, window)
-    
+    centers, mean_melt = moving_average(melt_vals_filtered, slope_vals_filtered, step, window)
 
-    fig, ax = plt.subplots(figsize=(6,5))
+
+    fig, ax = plt.subplots(figsize=(6,4))
 
     # Axe gauche : vitesse et amplitude
-    ax.plot(centers, mean_relampl, color='crimson', label='Relative amplitude')
+    ax.plot(centers, mean_relampl, color='green', label='Relative amplitude')
     ax.set_xlabel('Slope (°)')
-    ax.set_ylabel('Relative Amplitude')
-    ax.grid(True, which='both', linestyle='--')
-
-    # Légendes
+    ax.set_ylabel('Relative Amplitude', color="green")
+    ax.tick_params(axis='y', labelcolor='green')
     ax.legend()
+    ax.grid(True, which='both', linestyle='--', color='green', alpha=0.3)
+
+    ax2 = ax.twinx()
+    ax2.plot(centers, mean_melt, color='purple', linestyle="--", label='Summer melt')
+    ax2.set_ylabel(r"Mean summer melt rate (m w.e. day$^{-1}$)", color='purple')
+    ax2.tick_params(axis='y', labelcolor='violet')
+    ax2.legend(loc='upper right')
+    ax2.grid(True, which='both', axis='y', linestyle='--', color='purple', alpha=0.3)
+
 
     plt.tight_layout()
     fig.savefig(fig_dir / "amplitude_vs_slope.pdf")
+    fig.savefig(fig_dir / "amplitude_vs_slope.png")
+    print("plot_relative_amplitude_vs_slope Done !")
     plt.close(fig)
 
 
@@ -445,7 +667,7 @@ def plot_conceptual_effective_pressure_model():
 
     fig, ax = plt.subplots(figsize=(7,5))
 
-    ax.plot(slope_line, tau_emp, linestyle='-', color='crimson', label='Average basal shear stress')
+    ax.plot(slope_line, tau_emp, linestyle='-', color='crimson', label=r'Average $\tau_b$')
 
     ax.plot(slope_line, CN_min, linestyle='-', color='orange')
     ax.plot(slope_line, CN_max, linestyle='-', color='orange')
@@ -482,27 +704,100 @@ def plot_conceptual_effective_pressure_model():
     ax.legend(loc = "upper left")
     ax.grid(linestyle="--")
 
+    # Axe droit : amplitude
+    slope_vals = slope.where(result_mask).values.flatten()
+    relampl_vals = amplitude_rel.where(result_mask).values.flatten()
+
+    # Filter slopes <40°
+    mask = (slope_vals >= 2) & (slope_vals <= 40)
+    slope_vals_filtered = slope_vals[mask]
+    relampl_vals_filtered = relampl_vals[mask]
+
+    # Moyenne glissante
+    step = 1       # pas entre les centres (1°)
+    window = 8    # largeur de la fenêtre glissante (5°)
+
+    centers, mean_relampl = moving_average(relampl_vals_filtered, slope_vals_filtered, step, window)
+    
+    ax2 = ax.twinx()
+    ax2.plot(centers, mean_relampl, color='green', label='Relative amplitude', alpha=0.6)
+    ax2.set_ylabel("Relative Amplitude", color='green', alpha=0.7)
+    ax2.tick_params(axis='y', labelcolor='green')
+    ax2.legend(loc='upper right')
+    ax2.grid(True, which='both', axis='y', linestyle='--', color='green', alpha=0.3)
+
     plt.tight_layout()
     fig.savefig(fig_dir / "N_vs_slope.pdf")
+    fig.savefig(fig_dir / "N_vs_slope.png")
+    print("plot_conceptual_effective_pressure_model Done !")
     plt.close(fig)
 
     
+def plot_masks():
+
+    # Créer une figure 2x2
+    fig, axes = plt.subplots(2, 2, figsize=(12, 12))
+
+    # Liste des masques et leurs titres
+    masks = [mask_xcount, mask_shadow, mask_snr, result_mask]
+    titles = ["Mask Xcount", "Mask Shadow", "Mask SNR", "Mask Total"]
+
+    # Tracer chaque masque
+    for i, ax in enumerate(axes.flat):
+        # Afficher le fond satellite
+        ax.imshow(np.moveaxis(img_map, 0, -1), extent=extent_map, origin='upper')
+
+        # Afficher le masque (noir = valide, transparent = invalide)
+        current_mask = masks[i]
+        current_mask.plot.contourf(ax=ax, levels=[0.5, 1.5], colors=['none', 'black'], add_colorbar=False)
+        
+        # Ajouter un titre
+        ax.set_title(titles[i])
+        ax.axis('off')
+
+        ax.set_xlim(np.nanmin(x_1d), np.nanmax(x_1d))
+        ax.set_ylim(np.nanmin(y_1d), np.nanmax(y_1d))
+
+    plt.tight_layout()
+    fig.savefig(fig_dir / "masks_map.pdf")
+    fig.savefig(fig_dir / "masks_map.png")
+    print("plot_masks Done !")
+    plt.close(fig)
 
 
 if __name__ == "__main__":
     plot_random_timeseries()
-    print("plot_random_timeseries Done !")
+    plot_histogram_extrema_slope()
     plot_histogram_inflex_slope()
-    print("plot_histogram_inflex_slope Done !")
     plot_daily_precip()
-    print("plot_daily_precip Done !")
     plot_typical_vel_melt_cycles()
-    print("plot_typical_vel_melt_cycles Done !")
+    # plot_vel_melt_cycles(0, 9)
+    # plot_vel_melt_cycles(18, 39)
+    plot_comp_vel_melt_cycles(0, 9, 18, 39)
     plot_slope_repartition()
-    print("plot_slope_repartition Done !")
     plot_altitude_analysis()
-    print("plot_altitude_analysis Done !")
     plot_relative_amplitude_vs_slope()
-    print("plot_relative_amplitude_vs_slope Done !")
     plot_conceptual_effective_pressure_model()
-    print("plot_conceptual_effective_pressure_model Done !")
+    plot_masks()
+
+    print("Type de base_mask :", base_mask.dtype)
+    print("Type de result_mask :", result_mask.dtype)
+    print("Type de mask_xcount :", mask_xcount.dtype)
+    print("Type de mask_shadow :", mask_shadow.dtype)
+    print("Type de mask_snr :", mask_snr.dtype)
+
+
+    # Liste des masques
+    masks = [result_mask, mask_xcount, mask_shadow, mask_snr]
+    mask_names = ["Mask Total", "Mask XCount", "Mask Shadow", "Mask SNR"]
+
+    # Nombre de points valides vs total pour chaque masque
+    for mask, name in zip(masks, mask_names):
+        total_points = base_mask.sum().item()
+        valid_points = mask.sum().item()
+
+        print(f"{name}:")
+        print(f"  - Nb of valid pts: {valid_points} / {total_points}")
+        print(f"  - %age of valid pts: {(valid_points / total_points) * 100:.2f}%")
+        print()
+

@@ -98,10 +98,11 @@ mask_total, base_mask, mask_xcount, mask_shadow, mask_snr = compute_total_mask_a
     min_valid_obs=80,
     threshold_xcount=100,
     threshold_shadow=50,
-    snr_threshold=15,
+    snr_threshold=10,
 )
 
-mask_valid = mask_total & mask_xcount & mask_shadow & mask_snr
+mask_valid = mask_total
+# mask_valid = base_mask & mask_xcount & mask_shadow & mask_snr
 
 # Chargement et alignement des rasters
 
@@ -119,6 +120,7 @@ mask_total = load_and_align_raster(mask_dir / "mask_total.tif", ref_grid).astype
 mask_xcount = load_and_align_raster(mask_dir / "mask_xcount.tif", ref_grid).astype(bool)
 mask_shadow = load_and_align_raster(mask_dir / "mask_shadow.tif", ref_grid).astype(bool)
 mask_snr = load_and_align_raster(mask_dir / "mask_snr.tif", ref_grid).astype(bool)
+base_mask = load_and_align_raster(mask_dir / "base_mask.tif", ref_grid).astype(bool)
 
 # Charger et aligner les rasters de timing des pics
 max_peak_doy = load_and_align_raster(out_dir / "max_peak_doy.tif", ref_grid)
@@ -207,6 +209,10 @@ ds_analysis = xr.Dataset(
         "min_peak_doy": min_peak_doy,
         "inflex_doy": inflex_doy,
         "mask": mask_valid,
+        "mask_xcount" : mask_xcount,
+        "mask_shadow" : mask_shadow,
+        "mask_snr" : mask_snr,
+        "base_mask" : base_mask
     }
 )
 

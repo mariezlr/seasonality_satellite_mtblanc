@@ -86,47 +86,6 @@ def create_mask_snr(vel_result, snr_threshold=15):
     return mask, snr_map
 
 
-# def compute_total_mask_and_export(output_file_path, xcount, vel_result, shadow_raster_path, min_valid_obs=80, threshold_xcount=100, threshold_shadow=50, snr_threshold=15):
-#     # Ensure velocity result has CRS and x/y coordinates for reprojection
-#     if not hasattr(vel_result, "rio"):
-#         vel_result = vel_result.rio.write_crs("EPSG:32632", inplace=False)
-#     elif vel_result.rio.crs is None:
-#         vel_result.rio.write_crs("EPSG:32632", inplace=True)
-
-#     base_mask = vel_result.notnull().any(dim='mid_date')
-#     base_mask = base_mask.astype('uint8')
-#     base_mask = base_mask.rio.write_crs("EPSG:32632", inplace=True)
-#     base_mask = base_mask.rio.reproject_match(vel_result)
-#     base_mask.rio.to_raster(output_file_path / "base_mask.tif")
-
-
-#     mask_xcount = create_mask_xcount(xcount, min_valid_obs, threshold_xcount)
-#     mask_xcount = mask_xcount.astype('uint8')
-#     mask_xcount = mask_xcount.rio.write_crs("EPSG:32632", inplace=True)
-#     mask_xcount = mask_xcount.rio.reproject_match(vel_result)
-#     mask_xcount.rio.to_raster(output_file_path / "mask_xcount.tif")
-
-
-#     mask_shadow = create_mask_shadow(vel_result, shadow_raster_path, threshold_shadow)
-#     mask_shadow = mask_shadow.astype('uint8')
-#     mask_shadow = mask_shadow.rio.write_crs("EPSG:32632", inplace=True)
-#     mask_shadow = mask_shadow.rio.reproject_match(vel_result)
-#     mask_shadow.rio.to_raster(output_file_path / "mask_shadow.tif")
-
-
-#     mask_snr, _ = create_mask_snr(vel_result, snr_threshold)
-#     mask_snr = mask_snr.astype('uint8')
-#     mask_snr = mask_snr.rio.write_crs("EPSG:32632", inplace=True)
-#     mask_snr = mask_snr.rio.reproject_match(vel_result)
-#     mask_snr.rio.to_raster(output_file_path / "mask_snr.tif")
-
-
-#     mask_total = base_mask & mask_xcount & mask_shadow & mask_snr
-#     mask_total.rio.to_raster(output_file_path / "mask_total.tif")
-
-#     return mask_total, base_mask, mask_xcount, mask_shadow, mask_snr
-
-
 
 def compute_total_mask_and_export(
     output_dir: Path,
