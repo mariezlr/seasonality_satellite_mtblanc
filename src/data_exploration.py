@@ -54,8 +54,10 @@ y = ds_merged.y.values
 X, Y = np.meshgrid(x, y)
 
 # Flatten (for scatter)
-x_1d = np.repeat(x[np.newaxis, :], y.size, axis=0).flatten()
-y_1d = np.repeat(y[:, np.newaxis], x.size, axis=1).flatten()
+x_1d = X.flatten()
+y_1d = Y.flatten()
+# x_1d = np.repeat(x[np.newaxis, :], y.size, axis=0).flatten()
+# y_1d = np.repeat(y[:, np.newaxis], x.size, axis=1).flatten()
 
 
 ds_merged = ds_merged.assign_coords(dayofyear=ds_merged['mid_date'].dt.dayofyear.data, year=ds_merged['mid_date'].dt.year.data)
@@ -67,7 +69,7 @@ ds_merged = ds_merged.where((ds_merged['mid_date'].dt.year >= 2016) & (ds_merged
 
 ### ----- Background satellite image -----
 
-tif_map = data_topo / "T32TLR_20250808T102701_TCI_60m.tif"
+tif_map = data_topo / "T32TLR_20250907T103031_TCI_10m.tif"
 with rasterio.open(tif_map) as src:
     img_map = src.read([1,2,3])     # R,G,B
     bounds = src.bounds
@@ -81,7 +83,7 @@ with rasterio.open(tif_map) as src:
 dem_file = data_topo / "Mt_Blanc_small_UTM32N.tif"
 
 
-## Outlines glaciers
+## Outlines glaciers from RGI
 outlines_csv_path = data_topo / "mtblanc_glaciers_outlines.csv"
 mtblanc_outlines = pd.read_csv(outlines_csv_path, header = 0, names = ['geometry_id', 'lon', 'lat'])
 
@@ -222,6 +224,33 @@ ts_daily = df_20162022.groupby('date')['RR'].mean()
 
 
 
+### ----- Flowline séracs du Géant -----
+
+zoom_points = [[339500, 5083500], [340500, 5083200], 
+               [339500, 5081500], [338500, 5081800], [339500, 5083500]]
+
+
+# Flowline
+flowline_points = [[339000, 5081650], [339200, 5082350], [339900, 5083000], [340000, 5083350]]
+x_flow_point = [point[0] for point in flowline_points]
+y_flow_point = [point[1] for point in flowline_points]
+
+from scipy.interpolate import CubicSpline, griddata
+
+cs = CubicSpline(x_flow_point, y_flow_point, bc_type='natural')
+x_flowline = np.linspace(flowline_points[0][0], flowline_points[-1][0], 100)
+y_flowline = cs(x_flowline)
+
+distances = [0]  # Le premier point a une distance de 0
+
+for i in range(1, len(x_flowline)):
+    dx = x_flowline[i] - x_flowline[i-1]
+    dy = y_flowline[i] - y_flowline[i-1]
+    distance = np.sqrt(dx**2 + dy**2)
+    distances.append(distances[-1] + distance)
+
+
+
 ### ----- Friction law Elmer -----
 
 elmer_base_dir = Path("C:/Users/zellerma/Documents/PhD/Recherche/friction_long_term_alps/archive/data")
@@ -279,10 +308,13 @@ CN_max = tau_emp * (1/theta_min)**(1/m)
 
 # Channels control
 CN_channels = 0.29 * np.tan(np.radians(slope_line))**0.47
+CN_channels_min = 0.27 * np.tan(np.radians(slope_line))**0.47
+CN_channels_max = 0.31 * np.tan(np.radians(slope_line))**0.47
+
 
 # Intersection : indexes where CN_empirical_cst crosses CN_min & CN_max
-idx_min = np.argwhere(np.diff(np.sign(CN_channels - CN_min))).flatten()
-idx_max = np.argwhere(np.diff(np.sign(CN_channels - CN_max))).flatten()
+idx_min = np.argwhere(np.diff(np.sign(CN_channels_max - CN_min))).flatten()
+idx_max = np.argwhere(np.diff(np.sign(CN_channels_min - CN_max))).flatten()
 
 slope_min_intersect = slope_line[idx_min]
 slope_max_intersect = slope_line[idx_max]
@@ -292,3 +324,5 @@ tau_emp = tau_emp[mask_line]
 CN_min = CN_min[mask_line]
 CN_max = CN_max[mask_line]
 CN_channels = CN_channels[mask_line]
+CN_channels_min = CN_channels_min[mask_line]
+CN_channels_max = CN_channels_max[mask_line]

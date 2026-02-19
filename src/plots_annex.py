@@ -128,6 +128,56 @@ def plot_slope_distribution():
     plt.close(fig)
 
 
+def plot_doymin_distribution():
+    # Créer une figure et un axe
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # Appliquer le masque pour obtenir uniquement les valeurs valides
+    doymin_values = min_peak_doy.where(result_mask).values.flatten()
+
+    # Tracer un histogramme
+    sns.histplot(doymin_values, bins=20, color='violet', edgecolor='black', alpha=0.7)
+
+    # Ajouter des labels et un titre
+    ax.set_title('Distribution des jour du min', fontsize=16)
+    ax.set_xlabel('Jour du min', fontsize=14)
+    ax.set_ylabel('Fréquence', fontsize=14)
+
+    ax.grid(linestyle='--', alpha=0.4)
+    ax.legend(loc='upper left')
+
+    # Sauvegarder et afficher le graphique
+    plt.tight_layout()
+    fig.savefig(fig_dir / "doymin_distribution.png", bbox_inches='tight')
+    print("plot_doymin_distribution Done !")
+    plt.close(fig)
+
+
+def plot_doymaxs_distribution():
+    # Créer une figure et un axe
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # Appliquer le masque pour obtenir uniquement les valeurs valides
+    doymax_values = max_peak_doy.where(result_mask).values.flatten()
+
+    # Tracer un histogramme
+    sns.histplot(doymax_values, bins=20, color='violet', edgecolor='black', alpha=0.7)
+
+    # Ajouter des labels et un titre
+    ax.set_title('Distribution des jour du max', fontsize=16)
+    ax.set_xlabel('Jour du max', fontsize=14)
+    ax.set_ylabel('Fréquence', fontsize=14)
+
+    ax.grid(linestyle='--', alpha=0.4)
+    ax.legend(loc='upper left')
+
+    # Sauvegarder et afficher le graphique
+    plt.tight_layout()
+    fig.savefig(fig_dir / "doymax_distribution.png", bbox_inches='tight')
+    print("plot_doymax_distribution Done !")
+    plt.close(fig)
+
+
 def plot_random_pixel_ts():
     # Trouver les indices des pixels valides
     notnan_pixels = vel_result.notnull().sum(dim='mid_date')
@@ -422,21 +472,109 @@ def plot_low_taub_location_Elmer():
     plt.close(fig)
 
 
+def plot_vel_melt_cycles(min_slope, max_slope):
+
+    if (min_slope + max_slope)/2 < 10:
+        color_vel = 'limegreen'
+        color_bins = ['#00ffff', '#3399ff', '#6666ff']    
+    else:
+        color_vel = 'crimson'
+        color_bins = ['#ffcc00', '#ff3300', '#cc0000']     
+
+    bins_temp = np.linspace(min_slope, max_slope, 4)
+
+    # Build 2D slope masks (numpy -> xarray)
+    mask_flat_2d = (slope >= bins_temp[0]) & (slope < bins_temp[1]) & result_mask
+    mask_mid_2d = (slope >= bins_temp[1]) & (slope < bins_temp[2]) & result_mask
+    mask_steep_2d = (slope >= bins_temp[2]) & (slope < bins_temp[3]) & result_mask
+
+    mask_all_2d = (slope >= bins_temp[0]) & (slope < bins_temp[3]) & result_mask
+
+    # Convert to xarray DataArray with spatial coordinates
+    mask_flat = xr.DataArray(mask_flat_2d, dims=("y", "x"),
+        coords={"y": vel_result.y, "x": vel_result.x})
+    
+    mask_mid = xr.DataArray(mask_mid_2d, dims=("y", "x"),
+        coords={"y": vel_result.y, "x": vel_result.x})
+
+    mask_steep = xr.DataArray(mask_steep_2d, dims=("y", "x"),
+        coords={"y": vel_result.y, "x": vel_result.x})
+
+    mask_all = xr.DataArray(mask_all_2d, dims=("y", "x"),
+        coords={"y": vel_result.y, "x": vel_result.x})
+    
+    # Masks applied to velocity cycles
+    mean_vel_all = vel_cycle.where(mask_all).mean(dim=["x","y"], skipna=True)[5:-5]
+    mean_vel_flat = vel_cycle.where(mask_flat).mean(dim=["x","y"], skipna=True)[5:-5]
+    mean_vel_mid = vel_cycle.where(mask_mid).mean(dim=["x","y"], skipna=True)[5:-5]
+    mean_vel_steep = vel_cycle.where(mask_steep).mean(dim=["x","y"], skipna=True)[5:-5]
+
+    mean_vel_all = mean_vel_all - mean_vel_all.mean()
+    mean_vel_flat = mean_vel_flat - mean_vel_flat.mean()
+    mean_vel_mid = mean_vel_mid - mean_vel_mid.mean()
+    mean_vel_steep = mean_vel_steep - mean_vel_steep.mean()
+
+    # Masks applied to melt rate cycles
+    mean_melt_flat = melt_cycle.where(mask_flat).mean(dim=["x","y"], skipna=True)
+    mean_melt_mid = melt_cycle.where(mask_mid).mean(dim=["x","y"], skipna=True)
+    mean_melt_steep = melt_cycle.where(mask_steep).mean(dim=["x","y"], skipna=True)
+
+    fig, ax1 = plt.subplots(figsize=(8, 5))
+
+    #ax1.plot(mean_vel_all['doy_approx'], mean_vel_all, label=fr" {min_slope}° $\leq$ slope < {max_slope}°", color=color_vel)
+    ax1.plot(mean_vel_flat['doy_approx'], mean_vel_flat, color=color_bins[0])
+    ax1.plot(mean_vel_mid['doy_approx'], mean_vel_mid, color=color_bins[1])
+    ax1.plot(mean_vel_steep['doy_approx'], mean_vel_steep, color=color_bins[2])
+    ax1.set_xlabel("Day of year", fontsize=14)
+    ax1.set_ylabel(r"Normalized Velocity (m yr$^{-1}$)", color='black', fontsize=14)
+    ax1.tick_params(axis='y', labelcolor='black')
+    ax1.legend(loc='upper left')
+    ax1.grid(True)
+
+    # Axe y droit pour débit
+    ax2 = ax1.twinx()
+
+    ax2.plot(mean_melt_flat['doy_approx'], mean_melt_flat, color=color_bins[0], linestyle="--", alpha=0.7, label=fr" {bins_temp[0]:.0f}° $\leq$ slope < {bins_temp[1]:.0f}°")
+    ax2.plot(mean_melt_mid['doy_approx'], mean_melt_mid, color=color_bins[1], linestyle="--", alpha=0.7, label=fr" {bins_temp[1]:.0f}° $\leq$ slope < {bins_temp[2]:.0f}°")
+    ax2.plot(mean_melt_steep['doy_approx'], mean_melt_steep, color=color_bins[2], linestyle = "--", alpha=0.7, label=fr" {bins_temp[2]:.0f}° $\leq$ slope < {bins_temp[3]:.0f}°")
+    ax2.set_ylabel(r"Melt rate (m w.e. day$^{-1}$)", color='blue', alpha=0.7)
+    ax2.tick_params(axis='y', labelcolor='blue')
+    ax2.legend(loc='upper right')
+    ax2.grid(True, which='both', axis='y', linestyle='--', color='blue', alpha=0.3)
+
+    # Ajout des labels mois en x (sur ax1)
+    month_starts = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335]
+    month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    ax1.set_xticks(month_starts)
+    ax1.set_xticklabels(month_labels)
+
+    #plt.title("Normalized seasonal velocity cycle by slope class & annual melt rate cycle")
+
+    plt.tight_layout()
+    fig.savefig(fig_dir / f"seasonal_vel_melt_cycles_{min_slope}_{max_slope}.pdf")
+    fig.savefig(fig_dir / f"seasonal_vel_melt_cycles_{min_slope}_{max_slope}.png")
+    print(f"plot_vel_melt_cycles_{min_slope}_{max_slope} Done !")
+    plt.close(fig)
+
+
 if __name__ == "__main__":
-    plot_elevation_map()
-    plot_slope_map()
-    plot_slope_distribution()
-    plot_random_pixel_ts()
-    plot_validation_pixel_ts(x_utm_Arg4_GPS, y_utm_Arg4_GPS, data_GPS_ARG4, "Arg4")
-    plot_annual_cycle_validation_point(data_GPS_ARG4, "Arg4")
-    plot_validation_pixel_ts(x_utm_ArgG_GPS, y_utm_ArgG_GPS, data_GPS_ARGG, "ArgG")
-    plot_annual_cycle_validation_point(data_GPS_ARGG, "ArgG")
-    plot_validation_pixel_ts(x_utm_Argw, y_utm_Argw, data_Argwheel, "Arg wheel")
-    plot_annual_cycle_validation_point(data_Argwheel, "Arg wheel")
-    plot_xcount_ts_validation_points()
-    plot_mean_ts_all_pixels()
-    plot_random_pixels_avg_year()
-    plot_meteofrance_map()
-    plot_taub_per_glacier_Elmer()
-    plot_taub_all_glaciers_Elmer()
-    plot_low_taub_location_Elmer()
+    # plot_elevation_map()
+    # plot_slope_map()
+    # plot_slope_distribution()
+    plot_doymin_distribution()
+    # plot_random_pixel_ts()
+    # plot_validation_pixel_ts(x_utm_Arg4_GPS, y_utm_Arg4_GPS, data_GPS_ARG4, "Arg4")
+    # plot_annual_cycle_validation_point(data_GPS_ARG4, "Arg4")
+    # plot_validation_pixel_ts(x_utm_ArgG_GPS, y_utm_ArgG_GPS, data_GPS_ARGG, "ArgG")
+    # plot_annual_cycle_validation_point(data_GPS_ARGG, "ArgG")
+    # plot_validation_pixel_ts(x_utm_Argw, y_utm_Argw, data_Argwheel, "Arg wheel")
+    # plot_annual_cycle_validation_point(data_Argwheel, "Arg wheel")
+    # plot_xcount_ts_validation_points()
+    # plot_mean_ts_all_pixels()
+    # plot_random_pixels_avg_year()
+    # plot_meteofrance_map()
+    # plot_taub_per_glacier_Elmer()
+    # plot_taub_all_glaciers_Elmer()
+    # plot_low_taub_location_Elmer()
+    # # plot_vel_melt_cycles(0, 9)
+    # # plot_vel_melt_cycles(18, 39)

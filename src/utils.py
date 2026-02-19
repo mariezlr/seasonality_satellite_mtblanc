@@ -48,6 +48,39 @@ def detrend_1d(arr1d):
     # Appliquer detrend
     return vel_detrended + vel_mean
 
+
+def detrend_1d_brutal(arr1d):
+    """
+    Detrend a 1D timeserie with linear adjustement,
+    by equaling the first and last values (cyclic continuity),
+    while keeping the same average.
+    """
+    # Si tout est NaN, retourne la série telle quelle
+    if np.all(np.isnan(arr1d)):
+        return arr1d
+
+    # Interpoler les NaN pour pouvoir appliquer detrend
+    arr = arr1d.copy()
+    nans = np.isnan(arr)
+    if np.any(nans):
+        x = np.arange(len(arr))
+        arr[nans] = np.interp(x[nans], x[~nans], arr[~nans])
+
+    # Calculer la moyenne originale
+    vel_mean = np.nanmean(arr)
+
+    # Calculer la tendance linéaire entre la première et la dernière valeur
+    x = np.arange(len(arr))
+    first_val = arr[0]
+    last_val = arr[-1]
+    trend = np.linspace(first_val, last_val, len(arr))
+
+    # Detrender la série en soustrayant la tendance et réaujster la moyenne
+    vel_detrended_cyclic = arr - trend + vel_mean
+
+    return vel_detrended_cyclic
+
+
 ## Interpoler les Nan pour que le filtrage fonctionne
 def interp_1d_fill(values, times):
     if np.all(np.isnan(values)):

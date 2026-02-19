@@ -28,7 +28,7 @@ vel_avg_spatial = xr.apply_ufunc(
 
 # Detrending timeseries
 vel_avg_detrended = xr.apply_ufunc(
-    detrend_1d,
+    detrend_1d_brutal,
     vel_avg_spatial,
     input_core_dims=[['mid_date']],
     output_core_dims=[['mid_date']],
@@ -90,7 +90,7 @@ amplitude_rel = (peaks_ds["max_peak_vals"] - peaks_ds["min_peak_vals"]) / avg_ve
 print("Computing masks...")
 
 shadow_raster_path = mask_dir / "shadow_map_border_merged.tif"
-mask_total, base_mask, mask_xcount, mask_shadow, mask_snr = compute_total_mask_and_export(
+mask_total, base_mask, mask_xcount, mask_shadow, mask_velavg, mask_snr = compute_total_mask_and_export(
     output_dir=mask_dir,
     xcount=xcount,
     vel_result=vel_result,
@@ -98,11 +98,15 @@ mask_total, base_mask, mask_xcount, mask_shadow, mask_snr = compute_total_mask_a
     min_valid_obs=80,
     threshold_xcount=100,
     threshold_shadow=50,
+    threshold_velavg=20,
     snr_threshold=10,
 )
 
+stable_areas_geospatial_path = mask_dir / "stable_areas" / "crop_stable_areas_massif_without_mask_Diego.gpkg"
+mask_stable_areas = compute_mask_stable_areas_and_export(output_dir=mask_dir, vel_result=vel_result, stable_areas_geospatial_path = stable_areas_geospatial_path)
+
 mask_valid = mask_total
-# mask_valid = base_mask & mask_xcount & mask_shadow & mask_snr
+# mask_valid = base_mask & mask_xcount & mask_shadow & mask_velavg & mask_snr
 
 # Chargement et alignement des rasters
 
@@ -119,8 +123,11 @@ ref_grid = ref_grid.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
 mask_total = load_and_align_raster(mask_dir / "mask_total.tif", ref_grid).astype(bool)
 mask_xcount = load_and_align_raster(mask_dir / "mask_xcount.tif", ref_grid).astype(bool)
 mask_shadow = load_and_align_raster(mask_dir / "mask_shadow.tif", ref_grid).astype(bool)
+mask_velavg = load_and_align_raster(mask_dir / "mask_velavg.tif", ref_grid).astype(bool)
 mask_snr = load_and_align_raster(mask_dir / "mask_snr.tif", ref_grid).astype(bool)
 base_mask = load_and_align_raster(mask_dir / "base_mask.tif", ref_grid).astype(bool)
+
+mask_stable_areas = load_and_align_raster(mask_dir / "mask_stable_areas.tif", ref_grid).astype(bool)
 
 # Charger et aligner les rasters de timing des pics
 max_peak_doy = load_and_align_raster(out_dir / "max_peak_doy.tif", ref_grid)
@@ -211,8 +218,11 @@ ds_analysis = xr.Dataset(
         "mask": mask_valid,
         "mask_xcount" : mask_xcount,
         "mask_shadow" : mask_shadow,
+        "mask_velavg" : mask_velavg,
         "mask_snr" : mask_snr,
-        "base_mask" : base_mask
+        "base_mask" : base_mask,
+        "mask_stable_areas" : mask_stable_areas
+
     }
 )
 

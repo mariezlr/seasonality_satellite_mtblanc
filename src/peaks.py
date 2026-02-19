@@ -8,44 +8,37 @@ from rasterio.transform import Affine
 
 
 def peak_and_index(arr_1d):
-    """Returns [max_val, max_idx, min_val, min_idx] for a 1D signal."""    
-    out = np.full(4, np.nan, dtype=np.float64)  # initialise a table of size 4
+    """
+    Returns [max_val, max_idx, min_val, min_idx] for a 1D signal.
+    arr_1d : velocity time series (1D)
+    """
+    out = np.full(4, np.nan, dtype=np.float64)
+    
     if np.all(np.isnan(arr_1d)):
         return out
-
-    peaks, _ = find_peaks(arr_1d)
-    troughs, _ = find_peaks(-arr_1d)
-
-    if len(peaks) > 0:
-        peak_vals = arr_1d[peaks]
-        max_peak_idx = peaks[np.nanargmax(peak_vals)]
-        out[0] = arr_1d[max_peak_idx]
-        out[1] = max_peak_idx
-
-    if len(troughs) > 0:
-        trough_vals = arr_1d[troughs]
-        min_trough_idx = troughs[np.nanargmin(trough_vals)]
-        out[2] = arr_1d[min_trough_idx]
-        out[3] = min_trough_idx
-
+    
+    max_idx = np.nanargmax(arr_1d)
+    min_idx = np.nanargmin(arr_1d)
+    
+    out[0] = arr_1d[max_idx]
+    out[1] = max_idx
+    out[2] = arr_1d[min_idx]
+    out[3] = min_idx
+    
     return out
 
 
 def idx_to_doy(idx_da, doy_array):
-    idx_vals = idx_da.values.astype(float)
-    valid = (
-        ~np.isnan(idx_vals) &
-        (idx_vals >= 0) &
-        (idx_vals < len(doy_array))
-    )
+    """
+    Converts max/min indexes to DOY, NaN if invalid.
+    """
+    idx_vals = idx_da.values
     out = np.full_like(idx_vals, np.nan, dtype=float)
+
+     # filter invalid indexes
+    valid = (idx_vals >= 0) & (idx_vals < len(doy_array))
     out[valid] = doy_array[idx_vals[valid].astype(int)]
-    return xr.DataArray(
-        out,
-        coords=idx_da.coords,
-        dims=idx_da.dims,
-        name=(idx_da.name or "idx") + "_doy"
-    )
+    return xr.DataArray(out, coords=idx_da.coords, dims=idx_da.dims, name=(idx_da.name or "idx") + "_doy")
 
 
 
@@ -152,25 +145,25 @@ def compute_peaks_and_export(
     max_peak_doy = idx_to_doy(datasets["max_peak_idx"], doy_array)
     min_peak_doy = idx_to_doy(datasets["min_peak_idx"], doy_array)
 
-    # Créer des DataArrays pour les DOY
-    max_peak_doy_da = xr.DataArray(
-        max_peak_doy,
-        coords={"y": velocity_cycle_mean.y, "x": velocity_cycle_mean.x},
-        dims=["y", "x"],
-        name="max_peak_doy"
-    )
-    max_peak_doy_da.rio.write_crs(f"EPSG:{epsg}", inplace=True)
+    # # Créer des DataArrays pour les DOY
+    # max_peak_doy_da = xr.DataArray(
+    #     max_peak_doy,
+    #     coords={"y": velocity_cycle_mean.y, "x": velocity_cycle_mean.x},
+    #     dims=["y", "x"],
+    #     name="max_peak_doy"
+    # )
+    max_peak_doy.rio.write_crs(f"EPSG:{epsg}", inplace=True)
 
-    min_peak_doy_da = xr.DataArray(
-        min_peak_doy,
-        coords={"y": velocity_cycle_mean.y, "x": velocity_cycle_mean.x},
-        dims=["y", "x"],
-        name="min_peak_doy"
-    )
-    min_peak_doy_da.rio.write_crs(f"EPSG:{epsg}", inplace=True)
+    # min_peak_doy_da = xr.DataArray(
+    #     min_peak_doy,
+    #     coords={"y": velocity_cycle_mean.y, "x": velocity_cycle_mean.x},
+    #     dims=["y", "x"],
+    #     name="min_peak_doy"
+    # )
+    min_peak_doy.rio.write_crs(f"EPSG:{epsg}", inplace=True)
 
     # Exporter les DOY en GeoTIFF
-    for name, da in {"max_peak_doy": max_peak_doy_da, "min_peak_doy": min_peak_doy_da}.items():
+    for name, da in {"max_peak_doy": max_peak_doy, "min_peak_doy": min_peak_doy}.items():
         metadata = {
             "units": "day of year",
             "description": f"Day of year corresponding to {name.replace('_doy', '')} indices."
@@ -178,7 +171,7 @@ def compute_peaks_and_export(
         export_to_geotiff(da, out_dir / f"{name}.tif", epsg=epsg, metadata=metadata, nodata=-9999, dtype="int16")
 
     # Ajouter les DOY au dictionnaire de retour
-    datasets.update({"max_peak_doy": max_peak_doy_da, "min_peak_doy": min_peak_doy_da})
+    datasets.update({"max_peak_doy": max_peak_doy, "min_peak_doy": min_peak_doy})
 
     return datasets
 

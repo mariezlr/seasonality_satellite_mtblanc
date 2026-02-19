@@ -3,6 +3,7 @@ from data_exploration import *
 import numpy as np
 import xarray as xr
 import rioxarray
+import geopandas as gpd
 from scipy.signal import welch
 from pathlib import Path
 
@@ -36,6 +37,18 @@ def create_mask_shadow(vel_result, shadow_raster_path, threshold_shadow=50):
     raster_utm = raster.rio.reproject_match(vel_result)
     
     mask = raster_utm < threshold_shadow
+    return mask
+
+
+def create_mask_velavg(vel_result, threshold_velavg=30):
+    """
+    Mask pixels based on their mean velocity. Pixels above 30m/yr are valid. Pixels below are not exploitable for seasonality analysis.
+
+    vel_result : Reference velocity raster for reprojection. (xarray.DataArray)
+    threshold_velavg: Threshold for mean velocity (default: 30 m/yr)
+    """
+    
+    mask = vel_result.mean(dim="mid_date") > threshold_velavg
     return mask
 
 
@@ -95,6 +108,7 @@ def compute_total_mask_and_export(
     min_valid_obs: int = 80,
     threshold_xcount: int = 100,
     threshold_shadow: int = 50,
+    threshold_velavg: int = 20,
     snr_threshold: int = 15,
 ) -> tuple[xr.DataArray, ...]:
     """
@@ -152,6 +166,18 @@ def compute_total_mask_and_export(
         description=f"Mask of pixels with shadow value <= {threshold_shadow}.",
     )
 
+
+    # --- Velavg mask ---
+    mask_velavg = create_mask_velavg(vel_result, threshold_velavg)
+    mask_velavg = _prepare_and_export_mask(
+        mask_velavg,
+        vel_result,
+        output_dir / "mask_velavg.tif",
+        title="Velavg Mask",
+        description=f"Mask of pixels with average velocity <= {threshold_velavg}.",
+    )
+
+
     # --- SNR mask ---
     mask_snr, _ = create_mask_snr(vel_result, snr_threshold)
     mask_snr = _prepare_and_export_mask(
@@ -163,10 +189,10 @@ def compute_total_mask_and_export(
     )
 
     # --- Total mask ---
-    mask_total = base_mask & mask_xcount & mask_shadow & mask_snr
+    mask_total = base_mask & mask_xcount & mask_shadow & mask_velavg & mask_snr
     mask_total.attrs = {
         "title": "Total Mask",
-        "description": "Combined mask from base, xcount, shadow, and SNR masks.",
+        "description": "Combined mask from base, xcount, shadow, velavg, and SNR masks.",
     }
     mask_total.rio.write_crs(vel_result.rio.crs, inplace=True)
     mask_total.rio.to_raster(
@@ -176,7 +202,7 @@ def compute_total_mask_and_export(
         compress="LZW",
     )
 
-    return mask_total, base_mask, mask_xcount, mask_shadow, mask_snr
+    return mask_total, base_mask, mask_xcount, mask_shadow, mask_velavg, mask_snr
 
 def _prepare_and_export_mask(
     mask: xr.DataArray,
@@ -239,3 +265,83 @@ def mask_stats(mask, velocities):
 
 
 
+# Masque zones statiques
+from rasterio.features import rasterize
+
+def create_mask_stable_areas(vel_result, stable_areas_geospatial_path):
+    """
+    Compute a boolean mask for stable areas from a geospatial file.
+    The mask is reprojected to match the reference raster (vel_result).
+
+    vel_result : Reference velocity raster (xarray.DataArray)
+    stable_areas_geospatial_path : Path to the geospatial file (.gpkg)
+    """
+    gdf = gpd.read_file(stable_areas_geospatial_path)
+
+    # Delete nul, empty and invalid geometries
+    gdf = gdf[~gdf.geometry.is_empty & gdf.geometry.notna()]
+    gdf["geometry"] = gdf.buffer(0)
+    gdf = gdf[gdf.is_valid]  
+
+    # Reprojection + alignment
+    gdf = gdf.to_crs(vel_result.rio.crs)
+
+    transform = vel_result.rio.transform()
+    out_shape = (vel_result.sizes["y"], vel_result.sizes["x"])
+
+    # Rasterize
+    mask_array = rasterize(
+        [(geom, 1) for geom in gdf.geometry],
+        out_shape=out_shape,
+        transform=transform,
+        fill=0,
+        dtype="uint8"
+    )
+
+    # Convert to boolean DataArray
+    mask_bool = xr.DataArray(
+        mask_array.astype(bool),
+        coords={
+            "y": vel_result["y"],
+            "x": vel_result["x"]},
+        dims=("y", "x"),
+        name="stable_areas_mask"
+    )
+
+    return mask_bool
+
+
+
+def compute_mask_stable_areas_and_export(
+    output_dir: Path,
+    vel_result: xr.DataArray,
+    stable_areas_geospatial_path: Path
+):
+    """
+    Compute and export a set of masks (base, xcount, shadow, SNR, and total) as GeoTIFFs.
+
+    Args:
+        output_dir: Directory where masks will be saved.
+        vel_result: DataArray containing velocity results.
+
+    Returns:
+        stable_areas_mask as xarray.DataArray.
+    """
+    # Ensure output_dir exists
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Ensure vel_result has CRS and x/y coordinates for reprojection
+    if not hasattr(vel_result, "rio"):
+        raise ValueError("vel_result must be a rio-accessible xarray.DataArray.")
+    if vel_result.rio.crs is None:
+        vel_result.rio.write_crs("EPSG:32632", inplace=True)
+
+    # --- Base mask ---
+    mask_stable_areas = create_mask_stable_areas(vel_result, stable_areas_geospatial_path)
+    mask_stable_areas = _prepare_and_export_mask(
+        mask_stable_areas,
+        vel_result,
+        output_dir / "mask_stable_areas.tif",
+        title="Stable Areas Mask",
+        description="Mask of pixels located outside of glaciers",
+    )
