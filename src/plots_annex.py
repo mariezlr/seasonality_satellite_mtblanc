@@ -557,11 +557,35 @@ def plot_vel_melt_cycles(min_slope, max_slope):
     plt.close(fig)
 
 
+def plot_amplitude_vs_phase():
+
+    amp_vals = amplitude.where(result_mask).values.flatten()
+    phase_vals = max_peak_doy.where(result_mask).values.flatten()
+    slope_vals = slope.where(result_mask).values.flatten()
+
+    valid = np.isfinite(amp_vals) & np.isfinite(phase_vals)
+
+    fig, ax = plt.subplots()
+    sc = ax.scatter(phase_vals[valid], amp_vals[valid], 
+                c=slope_vals[valid], s=5)
+    ax.set_xlabel("Phase (DOY of max velocity)")
+    ax.set_ylabel("Seasonal amplitude")
+
+    cbar = fig.colorbar(sc, ax=ax)
+    cbar.set_label("Slope (°)")
+
+    plt.tight_layout()
+    fig.savefig(fig_dir / f"amplitude_vs_phase.pdf")
+    fig.savefig(fig_dir / f"amplitude_vs_phase.png")
+    print(f"plot_amplitude_vs_phase Done !")
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     # plot_elevation_map()
     # plot_slope_map()
     # plot_slope_distribution()
-    plot_doymin_distribution()
+    # plot_doymin_distribution()
     # plot_random_pixel_ts()
     # plot_validation_pixel_ts(x_utm_Arg4_GPS, y_utm_Arg4_GPS, data_GPS_ARG4, "Arg4")
     # plot_annual_cycle_validation_point(data_GPS_ARG4, "Arg4")
@@ -578,3 +602,4 @@ if __name__ == "__main__":
     # plot_low_taub_location_Elmer()
     # # plot_vel_melt_cycles(0, 9)
     # # plot_vel_melt_cycles(18, 39)
+    plot_amplitude_vs_phase()

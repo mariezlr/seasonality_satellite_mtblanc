@@ -180,3 +180,27 @@ def moving_median(y, x, step, window):
         if np.any(mask):
             result[i] = np.nanmedian(y[mask])
     return centers, result
+
+
+
+### ----- Friction law analysis -----
+
+def power_law(u_bed, As, m=3):
+    tau_b = (u_bed/As)**(1/m)
+    return tau_b
+
+
+def cavitation_law(u_bed, CN, q, As, m=3): # no rate weakening
+    alpha = ((q-1)**(q-1))/(q**q)
+    chi = u_bed /(As*(CN)**m)
+    tau_b = (CN)*(chi/(1+alpha*chi**q))**(1/m)
+    
+    if q != 1:  # Avoid division by zero error
+        try:
+            # Find u_bed_max so that tau_b is maximal and define an asymptote for this value
+            u_bed_max = (As * CN**m) * (1 / (alpha * (q-1)))**(1/q)
+            tau_b = np.where(u_bed > u_bed_max, CN, tau_b)
+        except ZeroDivisionError:
+            pass
+
+    return tau_b

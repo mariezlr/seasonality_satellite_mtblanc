@@ -15,15 +15,21 @@ xcount = np.sqrt(ds_merged['xcount_x']**2 + ds_merged['xcount_y']**2)
 print("Processing velocity timeseries...")
 
 # Spatial smoothing
-vel_avg_spatial = xr.apply_ufunc(
-    convolve_2d,
-    velocity,
-    kwargs={'kernel': kernel},
-    input_core_dims=[['y', 'x']],
-    output_core_dims=[['y', 'x']],
-    vectorize=True,
-    dask='parallelized' if velocity.chunks else False,
-    output_dtypes=[velocity.dtype]
+# vel_avg_spatial = xr.apply_ufunc(
+#     convolve_2d,
+#     velocity,
+#     kwargs={'kernel': kernel},
+#     input_core_dims=[['y', 'x']],
+#     output_core_dims=[['y', 'x']],
+#     vectorize=True,
+#     dask='parallelized' if velocity.chunks else False,
+#     output_dtypes=[velocity.dtype]
+# )
+
+vel_avg_spatial = (
+    velocity
+    .rolling(x=3, y=3, center=True, min_periods=4)
+    .mean(skipna=True)
 )
 
 # Detrending timeseries
@@ -36,6 +42,8 @@ vel_avg_detrended = xr.apply_ufunc(
     dask='parallelized' if vel_avg_spatial.chunks else False,
     output_dtypes=[vel_avg_spatial.dtype]
 ).rename("vel_avg_detrended")
+
+vel_avg_detrended = vel_avg_detrended.transpose('mid_date', 'y', 'x')
 
 # NaNs Interpolation 
 vel_avg_interp = xr.apply_ufunc(
@@ -128,6 +136,7 @@ mask_snr = load_and_align_raster(mask_dir / "mask_snr.tif", ref_grid).astype(boo
 base_mask = load_and_align_raster(mask_dir / "base_mask.tif", ref_grid).astype(bool)
 
 mask_stable_areas = load_and_align_raster(mask_dir / "mask_stable_areas.tif", ref_grid).astype(bool)
+mask_total = mask_total & (~mask_stable_areas)
 
 # Charger et aligner les rasters de timing des pics
 max_peak_doy = load_and_align_raster(out_dir / "max_peak_doy.tif", ref_grid)

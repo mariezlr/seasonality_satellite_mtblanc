@@ -308,8 +308,42 @@ CN_max = tau_emp * (1/theta_min)**(1/m)
 
 # Channels control
 CN_channels = 0.29 * np.tan(np.radians(slope_line))**0.47
-CN_channels_min = 0.27 * np.tan(np.radians(slope_line))**0.47
-CN_channels_max = 0.31 * np.tan(np.radians(slope_line))**0.47
+
+df_CN_slopes = pd.read_csv(data_topo / "CN_vs_slope_points.csv")
+
+slope_vals_Elmer = df_CN_slopes["slope_deg"].values
+CN_vals_Elmer = df_CN_slopes["CN"].values
+f_values = CN_vals_Elmer / np.tan(np.radians(slope_vals_Elmer))**0.47
+bins = np.linspace(slope_vals_Elmer.min(), slope_vals_Elmer.max(), 6)
+
+tan_term = np.tan(np.radians(slope_vals_Elmer))**0.47
+f_fit = np.sum(CN_vals_Elmer * tan_term) / np.sum(tan_term**2)
+f_values = CN_vals_Elmer / tan_term
+delta = np.percentile(np.abs(f_values - f_fit), 25)
+f_min = f_fit - delta
+f_max = f_fit + delta
+
+CN_channels_min = f_min * np.tan(np.radians(slope_line))**0.47
+CN_channels_max = f_max * np.tan(np.radians(slope_line))**0.47
+
+# f_min_list = []
+# f_max_list = []
+
+# for i in range(len(bins)-1):
+#     mask = (slope_vals_Elmer >= bins[i]) & (slope_vals_Elmer < bins[i+1])
+#     if np.sum(mask) > 0:
+#         f_bin = f_values[mask]
+#         f_min_list.append(np.percentile(f_bin,10))
+#         f_max_list.append(np.percentile(f_bin,90))
+
+# f_min = min(f_min_list)
+# f_max = max(f_max_list)
+
+CN_channels_min = f_min * np.tan(np.radians(slope_line))**0.47
+CN_channels_max = f_max * np.tan(np.radians(slope_line))**0.47
+
+# CN_channels_min = 0.27 * np.tan(np.radians(slope_line))**0.47
+# CN_channels_max = 0.31 * np.tan(np.radians(slope_line))**0.47
 
 
 # Intersection : indexes where CN_empirical_cst crosses CN_min & CN_max
