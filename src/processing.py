@@ -113,9 +113,6 @@ mask_total, base_mask, mask_xcount, mask_shadow, mask_velavg, mask_snr = compute
 stable_areas_geospatial_path = mask_dir / "stable_areas" / "crop_stable_areas_massif_without_mask_Diego.gpkg"
 mask_stable_areas = compute_mask_stable_areas_and_export(output_dir=mask_dir, vel_result=vel_result, stable_areas_geospatial_path = stable_areas_geospatial_path)
 
-mask_valid = mask_total
-# mask_valid = base_mask & mask_xcount & mask_shadow & mask_velavg & mask_snr
-
 # Chargement et alignement des rasters
 
 print("Loading and aligning masks and peak timing rasters...")
@@ -137,6 +134,9 @@ base_mask = load_and_align_raster(mask_dir / "base_mask.tif", ref_grid).astype(b
 
 mask_stable_areas = load_and_align_raster(mask_dir / "mask_stable_areas.tif", ref_grid).astype(bool)
 mask_total = mask_total & (~mask_stable_areas)
+
+mask_valid = mask_total
+# mask_valid = base_mask & mask_xcount & mask_shadow & mask_velavg & mask_snr
 
 # Charger et aligner les rasters de timing des pics
 max_peak_doy = load_and_align_raster(out_dir / "max_peak_doy.tif", ref_grid)

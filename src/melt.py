@@ -22,7 +22,7 @@ def build_melt_cycle(dem_da, unique_cycles, dates, temps, cycles):
         T_local = temp2400 - 0.0065 * (dem_da.values - 2400.0)
 
         # calcule melt (m w.e. per day), 0 si <0
-        melt_2d = np.where(T_local > 0, 0.009 * T_local, 0.0)
+        melt_2d = np.where(T_local > 0, 0.006 * T_local, 0.0)
 
         # appliquer mask (évite stocker valeurs hors zone)
         valid = np.isfinite(melt_2d)
@@ -136,7 +136,7 @@ def create_melt_cycle_da(melt_da_path, melt_file, dem_da, ref_grid):
         output_path=melt_da_path,
         title="Melt Cycle Mean",
         description="Mean melt cycle computed from temperature timeseries.",
-        units="°C/day",
+        units="m w.e./day",
         crs="EPSG:32632",
         encoding={"melt_cycle_mean": {"dtype": "float32", "zlib": True, "complevel": 4}}
     )

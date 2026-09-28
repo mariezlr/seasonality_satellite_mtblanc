@@ -25,17 +25,17 @@ month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 years = np.arange(2016, 2023)
 
 
-### ----- Main dataset -----
+### ----- Main dataset TICOI-----
 
 ds_path = Path(data_dir / "ds_merged.nc")
 
 if not ds_path.exists():
     print(f"File {ds_path} doesn't exist. Creation of the file...")
 
-    file_list = ["../archive/data/Cubes_TICOI/c_x00980_y03920_interp.nc", "../archive/data/Cubes_TICOI/c_x01225_y03675_interp.nc", 
-                "../archive/data/Cubes_TICOI/c_x01225_y03920_interp.nc", "../archive/data/Cubes_TICOI/c_x01470_y03430_1_interp.nc", 
-                "../archive/data/Cubes_TICOI/c_x01470_y03430_2_interp.nc", "../archive/data/Cubes_TICOI/c_x01470_y03675_1_interp.nc", 
-                "../archive/data/Cubes_TICOI/c_x01470_y03675_2_interp.nc", "../archive/data/Cubes_TICOI/c_x01715_y03430_interp.nc"] 
+    file_list = [script_dir / "../archive/data/Cubes_TICOI/c_x00980_y03920_interp.nc", script_dir / "../archive/data/Cubes_TICOI/c_x01225_y03675_interp.nc", 
+                script_dir / "../archive/data/Cubes_TICOI/c_x01225_y03920_interp.nc", script_dir / "../archive/data/Cubes_TICOI/c_x01470_y03430_1_interp.nc", 
+                script_dir / "../archive/data/Cubes_TICOI/c_x01470_y03430_2_interp.nc", script_dir / "../archive/data/Cubes_TICOI/c_x01470_y03675_1_interp.nc", 
+                script_dir / "../archive/data/Cubes_TICOI/c_x01470_y03675_2_interp.nc", script_dir / "../archive/data/Cubes_TICOI/c_x01715_y03430_interp.nc"] 
 
     ds_list = [xr.open_dataset(f) for f in file_list]
     merge_datasets(ds_list).to_netcdf(ds_path)
@@ -63,9 +63,12 @@ y_1d = Y.flatten()
 ds_merged = ds_merged.assign_coords(dayofyear=ds_merged['mid_date'].dt.dayofyear.data, year=ds_merged['mid_date'].dt.year.data)
 
 # Skip incomplete years
-ds_merged = ds_merged.where((ds_merged['mid_date'].dt.year >= 2016) & (ds_merged['mid_date'].dt.year <= 2022), drop=True)
+# ds_merged = ds_merged.where((ds_merged['mid_date'].dt.year >= 2016) & (ds_merged['mid_date'].dt.year <= 2022), drop=True)
 
-
+# Skip incomplete years. Using .sel() on the time index rather than
+# .where(drop=True) keeps the operation lazy: .where() would force the
+# whole cube (several GB) into memory.
+ds_merged = ds_merged.sel(mid_date=slice("2016-01-01", "2022-12-31"))
 
 ### ----- Background satellite image -----
 
@@ -318,26 +321,21 @@ bins = np.linspace(slope_vals_Elmer.min(), slope_vals_Elmer.max(), 6)
 
 tan_term = np.tan(np.radians(slope_vals_Elmer))**0.47
 f_fit = np.sum(CN_vals_Elmer * tan_term) / np.sum(tan_term**2)
-f_values = CN_vals_Elmer / tan_term
-delta = np.percentile(np.abs(f_values - f_fit), 25)
-f_min = f_fit - delta
-f_max = f_fit + delta
 
-CN_channels_min = f_min * np.tan(np.radians(slope_line))**0.47
-CN_channels_max = f_max * np.tan(np.radians(slope_line))**0.47
+# CHANGED: replace arbitrary 25th-percentile delta with the analytical
+# standard error of f_fit from the 1-parameter linear regression CN = f * x
+# (regression through the origin, x = tan(alpha)^0.47).
+# SE(f) = sqrt(sum_i(residuals^2) / (n-1)) / sqrt(sum_i(x_i^2))
+n = len(CN_vals_Elmer)
+residuals_f = CN_vals_Elmer - f_fit * tan_term
+SE_f = np.sqrt(np.sum(residuals_f**2) / (n - 1)) / np.sqrt(np.sum(tan_term**2))
 
-# f_min_list = []
-# f_max_list = []
+# ±1 SE band (68% confidence interval on f_fit given the 10 data points)
+f_min = f_fit - SE_f
+f_max = f_fit + SE_f
 
-# for i in range(len(bins)-1):
-#     mask = (slope_vals_Elmer >= bins[i]) & (slope_vals_Elmer < bins[i+1])
-#     if np.sum(mask) > 0:
-#         f_bin = f_values[mask]
-#         f_min_list.append(np.percentile(f_bin,10))
-#         f_max_list.append(np.percentile(f_bin,90))
-
-# f_min = min(f_min_list)
-# f_max = max(f_max_list)
+print(f_min, f_max)
+print(f"f_fit = {f_fit:.3f} ± {SE_f:.3f}")
 
 CN_channels_min = f_min * np.tan(np.radians(slope_line))**0.47
 CN_channels_max = f_max * np.tan(np.radians(slope_line))**0.47
