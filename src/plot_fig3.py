@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Conceptual model figure.
 
@@ -12,13 +10,9 @@ cavities close enough to each other form a mechanically linked cluster, and
 conduits follow the least-cost path between neighbouring clusters, crossing
 the bumps only at their lowest cols.
 
-Reproduce with:      python conceptual_model_figure.py
-Dependencies:        numpy, scipy, matplotlib
+Run with:      python plot_fig3.py
 """
 from __future__ import annotations
-
-from utils import *
-from data_exploration import *
 
 import heapq
 from dataclasses import dataclass, field
@@ -26,58 +20,18 @@ from pathlib import Path
 
 import matplotlib.patheffects as pe
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.patches import FancyArrow, Polygon, Rectangle
-from scipy.ndimage import (center_of_mass, distance_transform_edt,
-                           gaussian_filter, label, uniform_filter)
-import matplotlib.ticker as mticker
-from scipy.ndimage import binary_fill_holes
+from scipy.ndimage import (binary_fill_holes, center_of_mass,
+                           distance_transform_edt, gaussian_filter, label,
+                           uniform_filter)
 
-
-
-FIG_DIR = Path(__file__).resolve().parent.parent / "figures"
-FIG_STEM = "CN_conceptual_model"
+from plots_config import save
+from data_exploration import *
 
 plt.rcParams["contour.negative_linestyle"] = "solid"
-
-# ---------------------------------------------------------------------
-# Chemins
-# ---------------------------------------------------------------------
-BASE_DIR = Path(r"C:/Users/zellerma/Documents/PhD/Recherche/seasonality_satellite_mtblanc")
-FIG_DIR = BASE_DIR / "figures"
-ROSE_PATH = FIG_DIR / "Compass_rose_simple.png"
-
-# Chemin vers le fichier NetCDF
-file_path = out_dir / "analysis_dataset.nc"
-
-# Charger le Dataset
-ds_analysis = xr.open_dataset(file_path)
-vel_result = ds_analysis["velocity"]
-vel_avg_detrended = ds_analysis["vel_detrended"]
-vel_lowpass = ds_analysis["vel_lowpass"]
-vel_cycle = ds_analysis["vel_cycle"]
-avg_velocity = ds_analysis["avg_velocity"]
-amplitude = ds_analysis["amplitude"]
-amplitude_rel = ds_analysis["amplitude_rel"]
-melt_cycle = ds_analysis["melt_cycle"]
-slope = ds_analysis["slope"]
-elevation = ds_analysis["elevation"]
-max_peak_doy = ds_analysis["max_peak_doy"]
-min_peak_doy = ds_analysis["min_peak_doy"]
-inflex_doy = ds_analysis["inflex_doy"]
-base_mask = ds_analysis["base_mask"]
-result_mask = ds_analysis["mask"] & base_mask
-mask_xcount = ds_analysis["mask_xcount"] & base_mask
-mask_shadow = ds_analysis["mask_shadow"] & base_mask
-mask_velavg = ds_analysis["mask_velavg"] & base_mask
-mask_snr = ds_analysis["mask_snr"] & base_mask
-mask_stable_areas = ds_analysis["mask_stable_areas"] # & base_mask
-
-melt_summer = melt_cycle.where((melt_cycle['doy_approx'] > 166) & (melt_cycle['doy_approx'] <= 258))
-avg_melt_summer = melt_summer.mean(dim=["cycle"], skipna=True)
-
-
 
 # ======================================================================
 # 1. PARAMETERS
@@ -728,24 +682,10 @@ def build_figure(cfg: Config | None = None, with_friction: bool = True):
     for ax, lab in panels:
         ax.text(0.0, 1.02, lab, transform=ax.transAxes, fontsize=20,
                 fontweight="bold", va="bottom", ha="left")
-    return fig
-
-
-def main():
-    FIG_DIR.mkdir(parents=True, exist_ok=True)
-    try:
-        fig = build_figure()
-        stem = FIG_STEM
-    except NotImplementedError as err:              # panels A and B not wired yet
-        print("warning: %s -- panel (C) only" % err)
-        fig = build_figure(with_friction=False)
-        stem = "network_plan"
-    for ext in ("pdf", "png", "svg"):
-        fig.savefig(FIG_DIR / f"{stem}.{ext}", dpi=200, bbox_inches="tight",
-                    pad_inches=0.02)
-    print("written:", FIG_DIR / f"{stem}.pdf")
+    
+    save(fig, "fig3_conceptual_model", dpi=200)
     plt.close(fig)
 
 
 if __name__ == "__main__":
-    main()
+    build_figure()
