@@ -66,3 +66,5 @@ Thumbs.db
 !data/output/tau_b_mean_8_glaciers.csv
 !data/topography/
 !data/topography/mtblanc_glaciers_outlines.csv
+src/plots_main.py
+src/plots_annex.py
