@@ -1,19 +1,68 @@
-# Ignore tous les fichiers et dossiers à la racine.
+# Ignores every file and folder
 /* 
 
-# Annule l'ignorance pour tous les dossiers (et leur contenu)
+# Cancels ignoring all folders
 !/**/ 
 
-# Ignore les dossiers d'archivage
-**/archive/
-**/data/ds_merged.nc
-**/data/
+# ---------------------------------------------------------------------
+# Data
+# ---------------------------------------------------------------------
+# Raw and intermediate data are not versioned (tens of GB). Only a few
+# small derived tables are tracked, whitelisted at the bottom of this file.
+data/
+archive/
+output_stable_areas/
 
+# Large formats, wherever they sit
+*.nc
+*.tif
+*.tiff
+*.jp2
+*.vrt
+*.SAFE/
+*.parquet
+*.gpkg
+
+
+# ---------------------------------------------------------------------
+# Figures
+# ---------------------------------------------------------------------
+# figures/ and figures_test/ are working directories: exploratory plots,
+# variants, drafts. Only figures_paper/ (the 9 manuscript figures) is versioned.
+figures/
+figures_test/
+
+# ---------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------
 __pycache__/
-*.pyc
-
-# Ignore les fichiers temporaires Jupyter
+*.py[cod]
+*.egg-info/
 .ipynb_checkpoints/
+.venv/
+venv/
 
-# Ignore les fichiers de test
-**/test*
+# Exploratory and scratch scripts
+src/exploratory/
+src/test*.py
+src/velstudy-nathan/
+
+# ---------------------------------------------------------------------
+# Editors and OS
+# ---------------------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+~$*
+*.pptx
+*.docx
+
+# ---------------------------------------------------------------------
+# Whitelisted data files (small, needed to run the figure scripts)
+# ---------------------------------------------------------------------
+!data/
+!data/output/
+!data/output/tau_b_mean_8_glaciers.csv
+!data/topography/
+!data/topography/mtblanc_glaciers_outlines.csv
